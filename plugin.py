@@ -6,95 +6,71 @@ from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
 from Components.ProgressBar import ProgressBar
-from enigma import eTimer, iServiceInformation
-import os, re, shutil, time
-from urllib.request import urlopen, urlretrieve
-from threading import Thread
+from enigma import eTimer, iServiceInformation, gFont, RT_VALIGN_CENTER
+from Tools.LoadPixmap import LoadPixmap
+import os
 
-# المسارات
+# المكتبة المسؤولة عن الرسم في القوائم بطريقة Python 3
+from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
+
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
 
 class BISSPro(Screen):
     def __init__(self, session):
         Screen.__init__(self, session)
         self.skin = """
-        <screen position="center,center" size="800,500" title="BissPro Smart v1.0">
-            <widget name="menu" position="20,20" size="760,350" scrollbarMode="showOnDemand" />
-            <widget name="status" position="20,380" size="760,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
-            <widget name="main_progress" position="100,430" size="600,10" foregroundColor="#00ff00" />
-            <eLabel text="Press OK to Select" position="20,460" size="760,30" font="Regular;20" halign="center" />
+        <screen position="center,center" size="900,600" title="BissPro Smart v1.0">
+            <widget name="menu" position="20,20" size="860,450" itemHeight="100" scrollbarMode="showOnDemand" transparent="1" />
+            <widget name="status" position="20,480" size="860,40" font="Regular;30" halign="center" foregroundColor="#f0a30a" />
+            <widget name="main_progress" position="150,530" size="600,10" foregroundColor="#00ff00" />
         </screen>"""
         
         self["status"] = Label("Ready")
         self["main_progress"] = ProgressBar()
-        
-        # قائمة بسيطة جداً لا تسبب كراش
-        self.list = [
-            (_("Add BISS Key Manually"), "add"),
-            (_("Key Editor (Delete/Edit)"), "editor"),
-            (_("Update Softcam.Key Online"), "upd"),
-            (_("Smart Auto Search Key"), "auto")
-        ]
-        self["menu"] = MenuList(self.list)
+        self["menu"] = MenuList([])
         
         self["actions"] = ActionMap(["OkCancelActions"], {
             "ok": self.ok,
             "cancel": self.close
         }, -1)
         
-        self.timer = eTimer()
-        try: self.timer.timeout.connect(self.show_result)
-        except: self.timer.callback.append(self.show_result)
+        self.onLayoutFinish.append(self.build_menu)
+
+    def build_menu(self):
+        icon_dir = PLUGIN_PATH + "icons/"
+        # مصفوفة البيانات: (الاسم، الوصف، الأيقونة، الأكشن)
+        options = [
+            ("Add BISS Key", "Add new key manually", "add.png", "add"),
+            ("Key Editor", "Manage your saved keys", "editor.png", "editor"),
+            ("Update Online", "Download latest softcam file", "update.png", "upd"),
+            ("Auto Search", "Find key for current channel", "auto.png", "auto")
+        ]
+        
+        menu_list = []
+        for name, desc, img, act in options:
+            pix = LoadPixmap(cached=True, path=icon_dir + img)
+            # بناء السطر يدوياً لضمان التوافق مع Python 3.12
+            res = [
+                act, # القيمة التي تعود عند الضغط
+                MultiContentEntryPixmapAlphaTest(pos=(15, 15), size=(70, 70), png=pix),
+                MultiContentEntryText(pos=(100, 10), size=(700, 45), font=0, text=name, flags=RT_VALIGN_CENTER),
+                MultiContentEntryText(pos=(100, 55), size=(700, 35), font=1, text=desc, color=0xbbbbbb, flags=RT_VALIGN_CENTER)
+            ]
+            menu_list.append(res)
+            
+        self["menu"].l.setList(menu_list)
+        self["menu"].l.setItemHeight(100)
+        self["menu"].l.setFont(0, gFont("Regular", 32))
+        self["menu"].l.setFont(1, gFont("Regular", 22))
 
     def ok(self):
-        selection = self["menu"].getCurrent()
-        if selection:
-            act = selection[1]
-            if act == "add": self.action_add()
-            elif act == "editor": self.action_editor()
-            elif act == "upd": self.action_update()
-            elif act == "auto": self.action_auto()
-
-    def action_add(self):
-        service = self.session.nav.getCurrentService()
-        if service:
-            self.session.openWithCallback(self.manual_done, HexInputScreen, service.info().getName())
-
-    def manual_done(self, key=None):
-        if key:
-            self.res = (True, "Key saved (Simulation)")
-            self.timer.start(100, True)
-
-    def action_editor(self):
-        self.session.open(BissManagerList)
-
-    def action_update(self):
-        self["status"].setText("Updating...")
-        self.res = (True, "Update finished")
-        self.timer.start(1000, True)
-
-    def action_auto(self):
-        self["status"].setText("Searching...")
-        self.res = (True, "Auto search complete")
-        self.timer.start(1000, True)
-
-    def show_result(self):
-        self["status"].setText("Ready")
-        self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO)
-
-class BissManagerList(Screen):
-    def __init__(self, session):
-        Screen.__init__(self, session)
-        self.skin = """<screen position="center,center" size="600,400" title="Editor"><widget name="keylist" position="10,10" size="580,380" /></screen>"""
-        self["keylist"] = MenuList([])
-        self["actions"] = ActionMap(["OkCancelActions"], {"cancel": self.close}, -1)
-
-class HexInputScreen(Screen):
-    def __init__(self, session, channel_name=""):
-        Screen.__init__(self, session)
-        self.skin = """<screen position="center,center" size="500,200" title="Input"><widget name="keylabel" position="10,80" size="480,60" font="Regular;40" halign="center" /></screen>"""
-        self["keylabel"] = Label("0000 0000 0000 0000")
-        self["actions"] = ActionMap(["OkCancelActions"], {"cancel": self.close}, -1)
+        curr = self["menu"].getCurrent()
+        if curr:
+            act = curr[0] # جلب الأكشن من أول عنصر في القائمة
+            if act == "add": self.session.open(MessageBox, "Add Manual", MessageBox.TYPE_INFO)
+            elif act == "editor": self.session.open(MessageBox, "Editor Open", MessageBox.TYPE_INFO)
+            elif act == "upd": self.session.open(MessageBox, "Update Start", MessageBox.TYPE_INFO)
+            elif act == "auto": self.session.open(MessageBox, "Searching...", MessageBox.TYPE_INFO)
 
 def main(session, **kwargs):
     session.open(BISSPro)
