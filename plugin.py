@@ -7,7 +7,7 @@ from Components.MenuList import MenuList
 from Components.Label import Label
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, ePicLoad
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time
 from urllib.request import urlopen, urlretrieve
@@ -88,6 +88,7 @@ class BISSPro(Screen):
         
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
+        
         self.onLayoutFinish.append(self.build_menu)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
@@ -121,15 +122,47 @@ class BISSPro(Screen):
 
     def build_menu(self):
         icon_dir = PLUGIN_PATH + "icons/"
-        menu_items = [("Add", "Add BISS Key Manually", "add", icon_dir + "add.png"), ("Key Editor", "Edit or Delete Stored Keys", "editor", icon_dir + "editor.png"), ("Update Softcam", "Download latest SoftCam.Key", "upd", icon_dir + "update.png"), ("Smart Auto Search", "Auto find key for current channel", "auto", icon_dir + "auto.png")]
+        menu_items = [
+            ("Add", "Add BISS Key Manually", "add", "add.png"), 
+            ("Key Editor", "Edit or Delete Stored Keys", "editor", "editor.png"), 
+            ("Update Softcam", "Download latest SoftCam.Key", "upd", "update.png"), 
+            ("Smart Auto Search", "Auto find key for current channel", "auto", "auto.png")
+        ]
+        
         lst = []
-        for name, desc, act, icon_path in menu_items:
-            pixmap = LoadPixmap(cached=True, path=icon_path)
-            res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), act])
+        for name, desc, act, icon_name in menu_items:
+            icon_path = os.path.join(icon_dir, icon_name)
+            pixmap = None
+            if os.path.exists(icon_path):
+                # تحميل الأيقونة 128x128 وتمريرها للمحرك
+                pixmap = LoadPixmap(path=icon_path)
+            
+            # تعديل حجم العرض إلى 70x70 لضمان التنسيق مع نصوص القائمة
+            res = (name, [
+                MultiContentEntryPixmapAlphaTest(
+                    pos=(self.ui.px(15), self.ui.px(15)), 
+                    size=(self.ui.px(70), self.ui.px(70)), 
+                    png=pixmap
+                ), 
+                MultiContentEntryText(
+                    pos=(self.ui.px(110), self.ui.px(10)), 
+                    size=(self.ui.px(850), self.ui.px(45)), 
+                    font=0, text=name, flags=RT_VALIGN_TOP
+                ), 
+                MultiContentEntryText(
+                    pos=(self.ui.px(110), self.ui.px(55)), 
+                    size=(self.ui.px(850), self.ui.px(35)), 
+                    font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb
+                ), 
+                act
+            ])
             lst.append(res)
+            
         self["menu"].l.setList(lst)
+        self["menu"].l.setItemHeight(self.ui.px(100))
         if hasattr(self["menu"].l, 'setFont'): 
-            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
+            self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -194,9 +227,6 @@ class BISSPro(Screen):
             raw_data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt", timeout=10).read().decode("utf-8")
             self["main_progress"].setValue(70)
             
-            # --- المحلل الذكي Smart Parser المحدث ---
-            # يبحث عن التردد، ثم يتخطى أي رموز تعبيرية أو نصوص (حتى 200 حرف) 
-            # ليصطاد أول 16 رقم هكس تأتي بعد هذا التردد مباشرة
             pattern = re.escape(curr_freq) + r'[\s\S]{0,200}?(([0-9A-Fa-f]{2}[\s\t]*){8})'
             m = re.search(pattern, raw_data, re.I)
             
