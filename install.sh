@@ -1,16 +1,16 @@
 #!/bin/sh
 # ==========================================
-#  BissPro Online Installer (No Git)
+#  BissPro-Smart Online Installer (No Git)
 #  Author : anow2008
 # ==========================================
 
-PLUGIN="BissPro"
+PLUGIN="BissPro-Smart"
 BASE_DIR="/usr/lib/enigma2/python/Plugins/Extensions"
 TARGET="$BASE_DIR/$PLUGIN"
-ZIP_URL="https://github.com/anow2008/BissPro/archive/refs/heads/main.tar.gz"
-LOG="/tmp/bisspro_install.log"
+ZIP_URL="https://github.com/anow2008/BissPro-Smart/archive/refs/heads/main.tar.gz"
+LOG="/tmp/bisspro_smart_install.log"
 
-echo "🔧 BissPro Installer Started" | tee $LOG
+echo "🔧 BissPro-Smart Installer Started" | tee $LOG
 
 # --- Detect Python ---
 if command -v python3 >/dev/null 2>&1; then
@@ -43,7 +43,8 @@ install_plugin() {
 
     mkdir -p "$BASE_DIR"
     cd /tmp || exit 1
-    rm -rf BissPro* main.tar.gz
+    # تنظيف أي بقايا قديمة باسم المشروع الجديد
+    rm -rf BissPro-Smart* main.tar.gz
 
     echo "⬇ Downloading plugin..." | tee -a $LOG
     if ! wget -O main.tar.gz "$ZIP_URL" >> $LOG 2>&1; then
@@ -60,7 +61,8 @@ install_plugin() {
     }
 
     rm -rf "$TARGET"
-    mv BissPro-main "$TARGET"
+    # ملاحظة: GitHub يضيف "-main" لاسم المجلد عند التحميل كـ ZIP
+    mv BissPro-Smart-main "$TARGET"
 
     chmod -R 755 "$TARGET"
     find "$TARGET" -name "*.pyc" -delete
@@ -75,7 +77,7 @@ install_plugin() {
     start_enigma2
 
     echo "================================="
-    echo " ✅ BissPro Installed Successfully"
+    echo " ✅ BissPro-Smart Installed Successfully"
     echo " 📄 Log: $LOG"
     echo "================================="
 }
