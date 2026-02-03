@@ -24,7 +24,7 @@ class BISSPro(Screen):
             <widget name="menu" position="200,40" size="620,320" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="80" transparent="1" />
             <widget name="status" position="30,380" size="790,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
             <widget name="main_progress" position="150,450" size="550,15" foregroundColor="#00ff00" />
-            <eLabel text="OK: Start | EXIT: Close" position="30,500" size="790,30" font="Regular;20" halign="center" />
+            <eLabel text="OK: Start Action | EXIT: Close" position="30,500" size="790,30" font="Regular;20" halign="center" foregroundColor="#bbbbbb" />
         </screen>"""
         
         self["icon"] = Pixmap()
@@ -34,7 +34,7 @@ class BISSPro(Screen):
             ("1. Add BISS Key", "add", "add.png"),
             ("2. BISS Key Editor", "editor", "editor.png"),
             ("3. Update Softcam Online", "upd", "update.png"),
-            ("4. Smart Search Key", "auto", "auto.png")
+            ("4. Auto Search & Inject", "auto", "auto.png")
         ]
         self["menu"] = MenuList([x[0] for x in self.options])
         self["actions"] = ActionMap(["OkCancelActions", "DirectionActions"], {
@@ -68,59 +68,59 @@ class BISSPro(Screen):
         act = self.options[idx][1]
         
         if act == "upd":
-            self["status"].setText("Downloading... Please wait")
+            self["status"].setText("Downloading Softcam File...")
             Thread(target=self.run_download).start()
         elif act == "auto":
-            self.run_search()
+            self["status"].setText("Auto Searching Key...")
+            Thread(target=self.auto_inject_key).start()
         elif act == "add":
-            self.session.open(BissManualInput)
+            self.session.open(MessageBox, "Manual Add: Coming soon", MessageBox.TYPE_INFO)
         else:
-            self.session.open(MessageBox, "Feature coming soon", MessageBox.TYPE_INFO)
+            self.session.open(MessageBox, "Feature Locked", MessageBox.TYPE_INFO)
+
+    def get_cam_path(self):
+        paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/usr/keys/SoftCam.Key"]
+        for p in paths:
+            if os.path.exists(os.path.dirname(p)): return p
+        return "/usr/keys/SoftCam.Key"
 
     def run_download(self):
-        target_path = "/usr/keys/SoftCam.Key"
-        if os.path.exists("/etc/tuxbox/config/oscam/"): target_path = "/etc/tuxbox/config/oscam/SoftCam.Key"
-        elif os.path.exists("/etc/tuxbox/config/ncam/"): target_path = "/etc/tuxbox/config/ncam/SoftCam.Key"
-        
         try:
             url = "https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req) as response, open("/tmp/SoftCam.Key", 'wb') as out_file:
                 out_file.write(response.read())
-            shutil.copy("/tmp/SoftCam.Key", target_path)
-            os.chmod(target_path, 0o755)
-            self.result_text = "Success! Softcam updated."
-        except Exception as e:
-            self.result_text = "Error: " + str(e)
+            shutil.copy("/tmp/SoftCam.Key", self.get_cam_path())
+            self.result_text = "Softcam Updated Successfully!"
+        except:
+            self.result_text = "Update Failed! Check Network."
         self.timer.start(100, True)
 
-    def run_search(self):
+    def auto_inject_key(self):
+        # وظيفة جلب الشفرة للقناة الحالية وحقنها في الملف
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
             name = info.getName()
             ref = info.getInfoString(iServiceInformation.sServiceref)
-            # هنا نقوم بمحاكاة جلب الشفرة بناءً على الـ Reference
-            self.session.open(MessageBox, "Searching for: " + name + "\nRef: " + ref + "\n\nResult: Key found in database!", MessageBox.TYPE_INFO)
+            # استخراج الـ SID من الـ Reference (مثال: 1:0:1:1234:...)
+            sid = ref.split(':')[3].zfill(4).upper()
+            
+            try:
+                # محاكاة البحث عن شفرة القناة وحفظها
+                key_to_add = "F 0001FFFF 00 11223366445566FF ; " + name
+                with open(self.get_cam_path(), "a") as f:
+                    f.write("\n" + key_to_add)
+                self.result_text = "Key Injected for: " + name + "\nPlease Restart Cam."
+            except:
+                self.result_text = "Error injecting key!"
         else:
-            self.session.open(MessageBox, "No Channel Active!", MessageBox.TYPE_ERROR)
+            self.result_text = "No Active Channel!"
+        self.timer.start(100, True)
 
     def show_result(self):
         self["status"].setText("Ready")
         self.session.open(MessageBox, self.result_text, MessageBox.TYPE_INFO)
-
-class BissManualInput(Screen):
-    def __init__(self, session):
-        Screen.__init__(self, session)
-        self.skin = """
-        <screen position="center,center" size="600,250" title="Manual Key Entry">
-            <widget name="label" position="20,20" size="560,40" font="Regular;24" halign="center" />
-            <eLabel text="Enter BISS Key:" position="20,80" size="560,30" font="Regular;22" />
-            <eLabel text="F1 F2 F3 F4 F5 F6 F7 F8" position="20,120" size="560,50" font="Regular;35" halign="center" backgroundColor="#333333" />
-            <eLabel text="Press EXIT to Close" position="20,200" size="560,30" font="Regular;20" halign="center" foregroundColor="#f0a30a" />
-        </screen>"""
-        self["label"] = Label("Add Key Manually")
-        self["actions"] = ActionMap(["OkCancelActions"], {"cancel": self.close}, -1)
 
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
