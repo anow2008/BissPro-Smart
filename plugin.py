@@ -193,11 +193,19 @@ class BISSPro(Screen):
             raw_sid = info.getInfo(iServiceInformation.sSID); combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF))
             raw_data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt", timeout=10).read().decode("utf-8")
             self["main_progress"].setValue(70)
-            m = re.search(re.escape(curr_freq) + r'.*?(([0-9A-Fa-f]{2}[\s\t]*){8})', raw_data, re.I | re.S)
+            
+            # --- المحلل الذكي Smart Parser المحدث ---
+            # يبحث عن التردد، ثم يتخطى أي رموز تعبيرية أو نصوص (حتى 200 حرف) 
+            # ليصطاد أول 16 رقم هكس تأتي بعد هذا التردد مباشرة
+            pattern = re.escape(curr_freq) + r'[\s\S]{0,200}?(([0-9A-Fa-f]{2}[\s\t]*){8})'
+            m = re.search(pattern, raw_data, re.I)
+            
             if m:
-                key = m.group(1).replace(" ", "").upper()
-                if self.save_biss_key(combined_id, key, ch_name): self.res = (True, f"Key Found: {key}")
-                else: self.res = (False, "Save Error")
+                key = m.group(1).replace(" ", "").replace("\t", "").upper()
+                if len(key) == 16:
+                    if self.save_biss_key(combined_id, key, ch_name): self.res = (True, f"Key Found: {key}")
+                    else: self.res = (False, "Save Error")
+                else: self.res = (False, "Invalid Key Format Found")
             else: self.res = (False, f"No Key Found for Freq {curr_freq}")
         except Exception: self.res = (False, "Network Error")
         self.timer.start(100, True)
