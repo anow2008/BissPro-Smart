@@ -10,23 +10,12 @@ from Components.ProgressBar import ProgressBar
 from enigma import eTimer, iServiceInformation
 from Tools.LoadPixmap import LoadPixmap
 import os, shutil
-from urllib.request import urlretrieve
+import urllib.request
 from threading import Thread
 
-# تحديد المسارات
+# تحديد المسار
 PLUGIN_PATH = os.path.dirname(__file__)
 ICONS = os.path.join(PLUGIN_PATH, "icons")
-
-def get_softcam_path():
-    paths = [
-        "/etc/tuxbox/config/oscam/SoftCam.Key",
-        "/etc/tuxbox/config/ncam/SoftCam.Key",
-        "/usr/keys/SoftCam.Key",
-        "/etc/tuxbox/config/SoftCam.Key"
-    ]
-    for p in paths:
-        if os.path.exists(p): return p
-    return "/usr/keys/SoftCam.Key"
 
 class BISSPro(Screen):
     def __init__(self, session):
@@ -37,7 +26,7 @@ class BISSPro(Screen):
             <widget name="menu" position="200,40" size="620,320" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="80" transparent="1" />
             <widget name="status" position="30,380" size="790,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
             <widget name="main_progress" position="150,450" size="550,15" foregroundColor="#00ff00" />
-            <eLabel text="OK to Select - EXIT to Close" position="30,500" size="790,30" font="Regular;20" halign="center" />
+            <eLabel text="Press OK to Start Action" position="30,500" size="790,30" font="Regular;20" halign="center" />
         </screen>"""
         
         self["icon"] = Pixmap()
@@ -47,8 +36,8 @@ class BISSPro(Screen):
         self.options = [
             ("1. Add BISS Key", "add", "add.png"),
             ("2. BISS Key Editor", "editor", "editor.png"),
-            ("3. Update Online", "upd", "update.png"),
-            ("4. Smart Search", "auto", "auto.png")
+            ("3. Update Softcam Online", "upd", "update.png"),
+            ("4. Smart Search Key", "auto", "auto.png")
         ]
         
         self["menu"] = MenuList([x[0] for x in self.options])
@@ -59,7 +48,7 @@ class BISSPro(Screen):
             "down": self.move_down
         }, -1)
         
-        self.msg = ""
+        self.result_text = ""
         self.timer = eTimer()
         try: self.timer.timeout.connect(self.show_result)
         except: self.timer.callback.append(self.show_result)
@@ -87,44 +76,52 @@ class BISSPro(Screen):
         act = self.options[idx][1]
         
         if act == "upd":
-            self["status"].setText("Downloading Softcam...")
+            self["status"].setText("Downloading... Please wait")
             self["main_progress"].setValue(50)
-            Thread(target=self.run_update).start()
+            Thread(target=self.run_download).start()
         elif act == "auto":
             self.run_search()
         else:
-            self.session.open(MessageBox, "Feature coming in next update", MessageBox.TYPE_INFO)
+            self.session.open(MessageBox, "Option working in next update", MessageBox.TYPE_INFO)
 
-    def run_update(self):
+    def run_download(self):
+        # البحث عن المسار المتاح للكتابة
+        paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/usr/keys/SoftCam.Key"]
+        target_path = "/usr/keys/SoftCam.Key" # الافتراضي
+        for p in paths:
+            if os.path.exists(os.path.dirname(p)):
+                target_path = p
+                break
+        
         try:
             url = "https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key"
-            urlretrieve(url, "/tmp/SoftCam.Key")
-            dest = get_softcam_path()
-            shutil.copy("/tmp/SoftCam.Key", dest)
-            self.msg = "Success: Softcam.Key updated in " + dest
-        except:
-            self.msg = "Download Failed! Check Connection."
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response, open("/tmp/SoftCam.Key", 'wb') as out_file:
+                out_file.write(response.read())
+            
+            shutil.copy("/tmp/SoftCam.Key", target_path)
+            os.chmod(target_path, 0o755) # إعطاء صلاحية الملف
+            self.result_text = "Success! Saved to:\n" + target_path
+        except Exception as e:
+            self.result_text = "Error: " + str(e)
+        
         self.timer.start(100, True)
 
     def run_search(self):
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
-            ref = info.getInfoString(iServiceInformation.sServiceref)
             name = info.getName()
-            self.session.open(MessageBox, "Searching for Key...\nChannel: " + name + "\nReference: " + ref, MessageBox.TYPE_INFO)
+            ref = info.getInfoString(iServiceInformation.sServiceref)
+            self.session.open(MessageBox, "Channel: " + name + "\nRef: " + ref + "\nSearching online...", MessageBox.TYPE_INFO)
         else:
-            self.session.open(MessageBox, "No Channel Active", MessageBox.TYPE_ERROR)
+            self.session.open(MessageBox, "No Channel Active!", MessageBox.TYPE_ERROR)
 
     def show_result(self):
         self["main_progress"].setValue(0)
         self["status"].setText("Ready")
-        if self.msg:
-            self.session.open(MessageBox, self.msg, MessageBox.TYPE_INFO)
-            self.msg = ""
+        self.session.open(MessageBox, self.result_text, MessageBox.TYPE_INFO)
 
-def main(session, **kwargs):
-    session.open(BISSPro)
-
-def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+def main(session, **kwargs): session.open(BISSPro)
+def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
