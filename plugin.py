@@ -10,7 +10,6 @@ from enigma import eTimer
 from Tools.LoadPixmap import LoadPixmap
 import os
 
-# تأكد أن هذا المسار هو المجلد الذي يحتوي على مجلد icons
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
 
 class BISSPro(Screen):
@@ -21,7 +20,7 @@ class BISSPro(Screen):
             <widget name="icon" position="40,80" size="128,128" alphatest="blend" />
             <widget name="menu" position="200,60" size="650,300" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="60" />
             <widget name="status" position="20,400" size="860,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
-            <eLabel text="Use OK to select your option" position="20,450" size="860,30" font="Regular;20" halign="center" foregroundColor="#bbbbbb" />
+            <eLabel text="Use Up/Down to Navigate - OK to Select" position="20,450" size="860,30" font="Regular;20" halign="center" foregroundColor="#bbbbbb" />
         </screen>"""
         
         self["icon"] = Pixmap()
@@ -34,42 +33,51 @@ class BISSPro(Screen):
             ("Smart Auto Search", "auto", "auto.png")
         ]
         
-        # ملء القائمة بالأسماء فقط
+        # إنشاء القائمة
         self["menu"] = MenuList([x[0] for x in self.options])
         
+        # تعريف الأزرار بشكل صريح
         self["actions"] = ActionMap(["OkCancelActions", "DirectionActions"], {
             "ok": self.ok,
             "cancel": self.close,
-            "up": self.change_selection,
-            "down": self.change_selection
+            "up": self.go_up,
+            "down": self.go_down
         }, -1)
         
-        self.onLayoutFinish.append(self.change_selection)
+        self.onLayoutFinish.append(self.init_plugin)
+
+    def init_plugin(self):
+        self["menu"].moveToIndex(0)
+        self.change_selection()
+
+    def go_up(self):
+        self["menu"].up()
+        self.change_selection()
+
+    def go_down(self):
+        self["menu"].down()
+        self.change_selection()
 
     def change_selection(self):
-        # تنفيذ تغيير الأيقونة
         try:
             idx = self["menu"].getSelectedIndex()
-            if idx is not None:
-                icon_name = self.options[idx][2]
-                icon_path = os.path.join(PLUGIN_PATH, "icons", icon_name)
-                
-                if os.path.exists(icon_path):
-                    self["icon"].instance.setPixmap(LoadPixmap(path=icon_path))
-                else:
-                    # إذا لم يجد الأيقونة يضع لوجو البلجن الافتراضي
-                    default_path = os.path.join(PLUGIN_PATH, "plugin.png")
-                    if os.path.exists(default_path):
-                        self["icon"].instance.setPixmap(LoadPixmap(path=default_path))
-        except Exception as e:
-            print("[BissPro] Error loading icon:", str(e))
+            icon_name = self.options[idx][2]
+            icon_path = os.path.join(PLUGIN_PATH, "icons", icon_name)
+            
+            if os.path.exists(icon_path):
+                self["icon"].instance.setPixmap(LoadPixmap(path=icon_path))
+            else:
+                # لو لم يجد الأيقونة جرب قراءة الـ plugin.png الأساسي
+                default_path = os.path.join(PLUGIN_PATH, "plugin.png")
+                if os.path.exists(default_path):
+                    self["icon"].instance.setPixmap(LoadPixmap(path=default_path))
+        except:
+            pass
 
     def ok(self):
         idx = self["menu"].getSelectedIndex()
-        if idx is not None:
-            act = self.options[idx][1]
-            # هنا سنضع الوظائف الحقيقية لاحقاً
-            self.session.open(MessageBox, "Executing: " + self.options[idx][0], MessageBox.TYPE_INFO)
+        act = self.options[idx][1]
+        self.session.open(MessageBox, "Executing: " + self.options[idx][0], MessageBox.TYPE_INFO)
 
 def main(session, **kwargs):
     session.open(BISSPro)
