@@ -5,67 +5,65 @@ from Screens.MessageBox import MessageBox
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
-from Components.ProgressBar import ProgressBar
-from enigma import eTimer, gFont, RT_VALIGN_CENTER
+from Components.Pixmap import Pixmap
+from enigma import eTimer
 from Tools.LoadPixmap import LoadPixmap
 import os
-
-# استدعاء المكونات بالطريقة الصحيحة لصور OpenATV الحديثة
-from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
 
 class BISSPro(Screen):
     def __init__(self, session):
         Screen.__init__(self, session)
+        # وضعنا Pixmap منفصل لعرض الأيقونة بجانب القائمة
         self.skin = """
-        <screen position="center,center" size="900,600" title="BissPro Smart v1.0">
-            <widget name="menu" position="20,20" size="860,450" itemHeight="110" scrollbarMode="showOnDemand" transparent="1" />
-            <widget name="status" position="20,480" size="860,40" font="Regular;30" halign="center" foregroundColor="#f0a30a" />
-            <widget name="main_progress" position="150,530" size="600,10" foregroundColor="#00ff00" />
+        <screen position="center,center" size="900,500" title="BissPro Smart v1.0">
+            <widget name="icon" position="40,60" size="128,128" alphatest="blend" />
+            <widget name="menu" position="200,60" size="650,300" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="60" />
+            <widget name="status" position="20,400" size="860,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
+            <eLabel text="Use OK to select your option" position="20,450" size="860,30" font="Regular;20" halign="center" foregroundColor="#bbbbbb" />
         </screen>"""
         
+        self["icon"] = Pixmap()
         self["status"] = Label("Ready")
-        self["main_progress"] = ProgressBar()
         self["menu"] = MenuList([])
         
-        self["actions"] = ActionMap(["OkCancelActions"], {
-            "ok": self.ok,
-            "cancel": self.close
-        }, -1)
-        
-        self.onLayoutFinish.append(self.build_menu)
-
-    def build_menu(self):
-        icon_dir = PLUGIN_PATH + "icons/"
-        options = [
-            ("Add BISS Key", "Add new key manually", "add.png", "add"),
-            ("Key Editor", "Manage your saved keys", "editor.png", "editor"),
-            ("Update Online", "Download latest softcam file", "update.png", "upd"),
-            ("Auto Search", "Find key for current channel", "auto.png", "auto")
+        # القائمة تحتوي على الاسم، الوصف، واسم ملف الأيقونة
+        self.options = [
+            ("Add BISS Key Manually", "add", "add.png"),
+            ("BISS Key Editor", "editor", "editor.png"),
+            ("Update Softcam Online", "upd", "update.png"),
+            ("Smart Auto Search", "auto", "auto.png")
         ]
         
-        menu_list = []
-        for name, desc, img, act in options:
-            pix = LoadPixmap(path=icon_dir + img)
-            # في بايثون 3.12، يجب وضع العناصر داخل قائمة [] وتمريرها كـ Tuple
-            res = (act, [
-                MultiContentEntryPixmapAlphaTest(pos=(15, 20), size=(70, 70), png=pix),
-                MultiContentEntryText(pos=(100, 15), size=(700, 45), font=0, text=name, flags=RT_VALIGN_CENTER),
-                MultiContentEntryText(pos=(100, 60), size=(700, 35), font=1, text=desc, color=0xbbbbbb, flags=RT_VALIGN_CENTER)
-            ])
-            menu_list.append(res)
-            
-        self["menu"].l.setList(menu_list)
-        self["menu"].l.setItemHeight(110)
-        self["menu"].l.setFont(0, gFont("Regular", 34))
-        self["menu"].l.setFont(1, gFont("Regular", 22))
+        self["actions"] = ActionMap(["OkCancelActions", "DirectionActions"], {
+            "ok": self.ok,
+            "cancel": self.close,
+            "up": self.update_icon, # تحديث الأيقونة عند الصعود
+            "down": self.update_icon # تحديث الأيقونة عند النزول
+        }, -1)
+        
+        self.onLayoutFinish.append(self.start_plugin)
+
+    def start_plugin(self):
+        # ملء القائمة بالنصوص فقط لتجنب الكراش
+        self["menu"].setList([x[0] for x in self.options])
+        self.update_icon()
+
+    def update_icon(self):
+        # كود تغيير الأيقونة بناءً على الخيار المختار
+        idx = self["menu"].getSelectedIndex()
+        if idx < len(self.options):
+            icon_file = self.options[idx][2]
+            full_path = PLUGIN_PATH + "icons/" + icon_file
+            if os.path.exists(full_path):
+                self["icon"].instance.setPixmap(LoadPixmap(path=full_path))
 
     def ok(self):
-        curr = self["menu"].getCurrent()
-        if curr:
-            act = curr[0]
-            self.session.open(MessageBox, "Action: " + act, MessageBox.TYPE_INFO)
+        idx = self["menu"].getSelectedIndex()
+        if idx < len(self.options):
+            act = self.options[idx][1]
+            self.session.open(MessageBox, "Option Selected: " + act, MessageBox.TYPE_INFO)
 
 def main(session, **kwargs):
     session.open(BISSPro)
