@@ -7,7 +7,7 @@ from Components.MenuList import MenuList
 from Components.Label import Label
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, eListboxPythonMultiContent
 from Tools.LoadPixmap import LoadPixmap
 from Tools.Directories import resolveFilename, SCOPE_PLUGINS
 import os, re, shutil, time
@@ -15,7 +15,7 @@ from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# التعريفات والروابط - تأكد من وجود المجلد بهذا الاسم تماماً
+# التعريفات والروابط
 # ==========================================================
 PLUGIN_PATH = resolveFilename(SCOPE_PLUGINS, "Extensions/BissPro/")
 VERSION_NUM = "v1.0"
@@ -69,6 +69,7 @@ class BISSPro(Screen):
             <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
+        
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
         self["btn_yellow"] = Label("Update")
@@ -89,9 +90,14 @@ class BISSPro(Screen):
         
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
+        
         self.onLayoutFinish.append(self.build_menu)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
+
+    def update_clock(self):
+        self["time_label"].setText(time.strftime("%H:%M:%S"))
+        self["date_label"].setText(time.strftime("%A, %d %B %Y"))
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -116,16 +122,12 @@ class BISSPro(Screen):
         except: self.res = (False, "Update Failed!")
         self.timer.start(100, True)
 
-    def update_clock(self):
-        self["time_label"].setText(time.strftime("%H:%M:%S"))
-        self["date_label"].setText(time.strftime("%A, %d %B %Y"))
-
     def build_menu(self):
-        # التأكد من المسار بشكل نهائي
-        icon_dir = os.path.join(PLUGIN_PATH, "icons")
+        # المسار المباشر لضمان القراءة
+        icon_dir = PLUGIN_PATH + "icons/"
         
         menu_items = [
-            ("Add", "Add BISS Key Manually", "add", "add.png"), 
+            ("Add Key", "Add BISS Key Manually", "add", "add.png"), 
             ("Key Editor", "Edit or Delete Stored Keys", "editor", "editor.png"), 
             ("Update Softcam", "Download latest SoftCam.Key", "upd", "update.png"), 
             ("Smart Auto Search", "Auto find key for current channel", "auto", "auto.png")
@@ -133,36 +135,36 @@ class BISSPro(Screen):
         
         lst = []
         for name, desc, act, icon_name in menu_items:
-            full_icon_path = os.path.join(icon_dir, icon_name)
+            full_path = icon_dir + icon_name
             pix = None
-            if os.path.exists(full_icon_path):
-                pix = LoadPixmap(path=full_icon_path)
+            if os.path.exists(full_path):
+                pix = LoadPixmap(path=full_path)
             
-            # ترتيب الـ MultiContent لضمان ظهور الأيقونة 128x128 داخل إطار 70x70
-            lst.append((name, [
+            # بناء محتوى السطر مع التأكد من ترتيب الـ Pixmap كأول عنصر
+            res = (name, [
                 MultiContentEntryPixmapAlphaTest(
-                    pos=(self.ui.px(15), self.ui.px(15)), 
-                    size=(self.ui.px(70), self.ui.px(70)), 
+                    pos=(self.ui.px(15), self.ui.px(10)), 
+                    size=(self.ui.px(80), self.ui.px(80)), 
                     png=pix
                 ), 
                 MultiContentEntryText(
-                    pos=(self.ui.px(110), self.ui.px(10)), 
+                    pos=(self.ui.px(115), self.ui.px(10)), 
                     size=(self.ui.px(850), self.ui.px(45)), 
                     font=0, text=name, flags=RT_VALIGN_TOP
                 ), 
                 MultiContentEntryText(
-                    pos=(self.ui.px(110), self.ui.px(55)), 
+                    pos=(self.ui.px(115), self.ui.px(55)), 
                     size=(self.ui.px(850), self.ui.px(35)), 
                     font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb
                 ), 
                 act
-            ]))
+            ])
+            lst.append(res)
             
         self["menu"].l.setList(lst)
         self["menu"].l.setItemHeight(self.ui.px(100))
-        if hasattr(self["menu"].l, 'setFont'): 
-            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
-            self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
+        self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -226,10 +228,8 @@ class BISSPro(Screen):
             raw_sid = info.getInfo(iServiceInformation.sSID); combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF))
             raw_data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt", timeout=10).read().decode("utf-8")
             self["main_progress"].setValue(70)
-            
             pattern = re.escape(curr_freq) + r'[\s\S]{0,200}?(([0-9A-Fa-f]{2}[\s\t]*){8})'
             m = re.search(pattern, raw_data, re.I)
-            
             if m:
                 key = m.group(1).replace(" ", "").replace("\t", "").upper()
                 if len(key) == 16:
