@@ -58,19 +58,14 @@ class BISSPro(Screen):
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(555)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
-            
             <eLabel position="{self.ui.px(70)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(300)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(530)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(760)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         self["btn_red"] = Label("Add Key")
@@ -126,26 +121,15 @@ class BISSPro(Screen):
 
     def build_menu(self):
         icon_dir = PLUGIN_PATH + "icons/"
-        menu_items = [
-            ("Add", "Add BISS Key Manually", "add", icon_dir + "add.png"),
-            ("Key Editor", "Edit or Delete Stored Keys", "editor", icon_dir + "editor.png"),
-            ("Update Softcam", "Download latest SoftCam.Key", "upd", icon_dir + "update.png"),
-            ("Smart Auto Search", "Auto find key for current channel", "auto", icon_dir + "auto.png")
-        ]
+        menu_items = [("Add", "Add BISS Key Manually", "add", icon_dir + "add.png"), ("Key Editor", "Edit or Delete Stored Keys", "editor", icon_dir + "editor.png"), ("Update Softcam", "Download latest SoftCam.Key", "upd", icon_dir + "update.png"), ("Smart Auto Search", "Auto find key for current channel", "auto", icon_dir + "auto.png")]
         lst = []
         for name, desc, act, icon_path in menu_items:
             pixmap = LoadPixmap(cached=True, path=icon_path)
-            res = (name, [
-                MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap),
-                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP),
-                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb),
-                act
-            ])
+            res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), act])
             lst.append(res)
         self["menu"].l.setList(lst)
         if hasattr(self["menu"].l, 'setFont'): 
-            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
-            self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -187,28 +171,20 @@ class BISSPro(Screen):
 
     def show_result(self): 
         self["main_progress"].setValue(0)
+        self["status"].setText("Ready")
         self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
 
-    def action_update(self): 
-        self["status"].setText("Updating Softcam...")
-        self["main_progress"].setValue(50)
-        Thread(target=self.do_update).start()
-
+    def action_update(self): self["status"].setText("Updating Softcam..."); self["main_progress"].setValue(50); Thread(target=self.do_update).start()
     def do_update(self):
         try:
             urlretrieve("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", "/tmp/SoftCam.Key")
-            shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
-            restart_softcam_global()
-            self.res = (True, "Softcam Updated")
+            shutil.copy("/tmp/SoftCam.Key", get_softcam_path()); restart_softcam_global(); self.res = (True, "Softcam Updated")
         except: self.res = (False, "Softcam Update Failed")
         self.timer.start(100, True)
 
     def action_auto(self):
         service = self.session.nav.getCurrentService()
-        if service: 
-            self["status"].setText("Searching Online...")
-            self["main_progress"].setValue(40)
-            Thread(target=self.do_auto, args=(service,)).start()
+        if service: self["status"].setText("Searching Online..."); self["main_progress"].setValue(40); Thread(target=self.do_auto, args=(service,)).start()
 
     def do_auto(self, service):
         try:
@@ -226,9 +202,6 @@ class BISSPro(Screen):
         except Exception: self.res = (False, "Network Error")
         self.timer.start(100, True)
 
-# ==========================================================
-# شاشة محرر المفاتيح
-# ==========================================================
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -244,7 +217,6 @@ class BissManagerList(Screen):
         </screen>"""
         self["keylist"] = MenuList([]); self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
         self.onLayoutFinish.append(self.load_keys)
-
     def load_keys(self):
         path = get_softcam_path(); keys = []
         if os.path.exists(path):
@@ -252,13 +224,11 @@ class BissManagerList(Screen):
                 for line in f:
                     if line.strip().upper().startswith("F "): keys.append(line.strip())
         self["keylist"].setList(keys)
-
     def edit_key(self):
         current = self["keylist"].getCurrent()
         if current:
             parts = current.split(); ch_name = current.split(";")[-1] if ";" in current else "Unknown"; self.old_line = current
             self.session.openWithCallback(self.finish_edit, HexInputScreen, ch_name, parts[3])
-
     def finish_edit(self, new_key=None):
         if new_key is None: return
         path = get_softcam_path(); parts = self.old_line.split(); parts[3] = str(new_key).upper(); new_line = " ".join(parts)
@@ -270,11 +240,9 @@ class BissManagerList(Screen):
                     else: f.write(line)
             self.load_keys(); restart_softcam_global()
         except: pass
-
     def delete_confirm(self):
         current = self["keylist"].getCurrent()
         if current: self.session.openWithCallback(self.delete_key, MessageBox, "Delete this key?", MessageBox.TYPE_YESNO)
-
     def delete_key(self, answer):
         if answer:
             current = self["keylist"].getCurrent(); path = get_softcam_path()
@@ -286,9 +254,6 @@ class BissManagerList(Screen):
                 self.load_keys(); restart_softcam_global()
             except: pass
 
-# ==========================================================
-# شاشة إدخال الكود (Hex)
-# ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
@@ -319,7 +284,6 @@ class HexInputScreen(Screen):
         }, -1)
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
         self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0; self.update_display()
-
     def update_display(self):
         display_parts = []
         for i in range(16):
@@ -329,17 +293,13 @@ class HexInputScreen(Screen):
             if (i + 1) % 4 == 0 and i < 15: display_parts.append(" - ")
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
-        
         char_bar = ""
         color_yellow = "\c00f0a30a"
         color_white = "\c00ffffff"
         for c in self.chars:
-            if c == self.chars[self.char_index]:
-                char_bar += "%s[ %s ]  " % (color_yellow, c)
-            else:
-                char_bar += "%s  %s    " % (color_white, c)
+            if c == self.chars[self.char_index]: char_bar += "%s[ %s ]  " % (color_yellow, c)
+            else: char_bar += "%s  %s    " % (color_white, c)
         self["char_list"].setText(char_bar)
-
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
     def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
     def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.key_list[self.index] = self.chars[self.char_index]; self.update_display()
