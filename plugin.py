@@ -2,7 +2,6 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
-from Screens.InputInterface import InputInterface
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
@@ -14,11 +13,11 @@ import os, shutil
 from urllib.request import urlretrieve
 from threading import Thread
 
+# تحديد المسارات
 PLUGIN_PATH = os.path.dirname(__file__)
 ICONS = os.path.join(PLUGIN_PATH, "icons")
 
 def get_softcam_path():
-    # البحث عن المسار الصحيح للسوفتكام في جهازك
     paths = [
         "/etc/tuxbox/config/oscam/SoftCam.Key",
         "/etc/tuxbox/config/ncam/SoftCam.Key",
@@ -60,6 +59,7 @@ class BISSPro(Screen):
             "down": self.move_down
         }, -1)
         
+        self.msg = ""
         self.timer = eTimer()
         try: self.timer.timeout.connect(self.show_result)
         except: self.timer.callback.append(self.show_result)
@@ -75,10 +75,12 @@ class BISSPro(Screen):
         self.update_ui()
 
     def update_ui(self):
-        idx = self["menu"].getSelectedIndex()
-        icon_file = os.path.join(ICONS, self.options[idx][2])
-        if os.path.exists(icon_file):
-            self["icon"].instance.setPixmap(LoadPixmap(icon_file))
+        try:
+            idx = self["menu"].getSelectedIndex()
+            icon_file = os.path.join(ICONS, self.options[idx][2])
+            if os.path.exists(icon_file):
+                self["icon"].instance.setPixmap(LoadPixmap(icon_file))
+        except: pass
 
     def ok(self):
         idx = self["menu"].getSelectedIndex()
@@ -90,10 +92,8 @@ class BISSPro(Screen):
             Thread(target=self.run_update).start()
         elif act == "auto":
             self.run_search()
-        elif act == "add":
-            self.session.open(BissManualInput)
         else:
-            self.session.open(MessageBox, "Feature under development", MessageBox.TYPE_INFO)
+            self.session.open(MessageBox, "Feature coming in next update", MessageBox.TYPE_INFO)
 
     def run_update(self):
         try:
@@ -101,7 +101,7 @@ class BISSPro(Screen):
             urlretrieve(url, "/tmp/SoftCam.Key")
             dest = get_softcam_path()
             shutil.copy("/tmp/SoftCam.Key", dest)
-            self.msg = "Updated Successfully to: " + dest
+            self.msg = "Success: Softcam.Key updated in " + dest
         except:
             self.msg = "Download Failed! Check Connection."
         self.timer.start(100, True)
@@ -112,29 +112,19 @@ class BISSPro(Screen):
             info = service.info()
             ref = info.getInfoString(iServiceInformation.sServiceref)
             name = info.getName()
-            self.session.open(MessageBox, "Searching for:\n" + name + "\nRef: " + ref, MessageBox.TYPE_INFO)
+            self.session.open(MessageBox, "Searching for Key...\nChannel: " + name + "\nReference: " + ref, MessageBox.TYPE_INFO)
         else:
-            self.session.open(MessageBox, "Please stand on a channel first", MessageBox.TYPE_ERROR)
+            self.session.open(MessageBox, "No Channel Active", MessageBox.TYPE_ERROR)
 
     def show_result(self):
         self["main_progress"].setValue(0)
         self["status"].setText("Ready")
-        self.session.open(MessageBox, self.msg, MessageBox.TYPE_INFO)
+        if self.msg:
+            self.session.open(MessageBox, self.msg, MessageBox.TYPE_INFO)
+            self.msg = ""
 
-# شاشة إدخال الشفرة يدوياً
-class BissManualInput(Screen):
-    def __init__(self, session):
-        Screen.__init__(self, session)
-        self.skin = """
-        <screen position="center,center" size="600,250" title="Add BISS Key">
-            <widget name="label" position="20,20" size="560,40" font="Regular;24" />
-            <eLabel text="Enter 16 chars Key:" position="20,80" size="560,30" font="Regular;22" />
-            <widget name="key_input" position="20,120" size="560,50" font="Regular;35" halign="center" />
-            <eLabel text="Press OK to Save - EXIT to Cancel" position="20,200" size="560,30" font="Regular;20" halign="center" foregroundColor="#f0a30a" />
-        </screen>"""
-        self["label"] = Label("Manual Key Entry")
-        self["key_input"] = Label("11 22 33 66 44 55 66 FF") # مجرد عرض مؤقت
-        self["actions"] = ActionMap(["OkCancelActions"], {"ok": self.close, "cancel": self.close}, -1)
+def main(session, **kwargs):
+    session.open(BISSPro)
 
-def main(session, **kwargs): session.open(BISSPro)
-def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+def Plugins(**kwargs):
+    return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
