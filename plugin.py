@@ -12,9 +12,9 @@ import os, re, shutil, time
 from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
-PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
+# تحديد المسار بطريقة تضمن عملها على بايثون 3
+PLUGIN_PATH = os.path.dirname(__file__)
 
-# دالة لجلب مسار السوفتكام الصحيح في جهازك
 def get_softcam_path():
     paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/usr/keys/SoftCam.Key"]
     for p in paths:
@@ -53,7 +53,8 @@ class BISSPro(Screen):
 
     def init_plugin(self):
         self["menu"].moveToIndex(0)
-        self.change_selection()
+        # إجبار الأيقونة على الظهور لأول مرة
+        eTimer.singleShot(100, self.change_selection)
 
     def go_up(self):
         self["menu"].up()
@@ -66,10 +67,22 @@ class BISSPro(Screen):
     def change_selection(self):
         try:
             idx = self["menu"].getSelectedIndex()
-            icon_path = os.path.join(PLUGIN_PATH, "icons", self.options[idx][2])
-            if os.path.exists(icon_path):
-                self["icon"].instance.setPixmap(LoadPixmap(path=icon_path))
-        except: pass
+            if idx is not None:
+                icon_name = self.options[idx][2]
+                # بناء المسار بشكل سليم للصور
+                full_icon_path = os.path.join(PLUGIN_PATH, "icons", icon_name)
+                
+                if os.path.exists(full_icon_path):
+                    self["icon"].instance.setPixmap(LoadPixmap(full_icon_path))
+                    self["icon"].show() # التأكد من تفعيل العرض
+                else:
+                    # محاولة عرض لوجو البلجن إذا فقدت الأيقونة
+                    p_path = os.path.join(PLUGIN_PATH, "plugin.png")
+                    if os.path.exists(p_path):
+                        self["icon"].instance.setPixmap(LoadPixmap(p_path))
+                        self["icon"].show()
+        except:
+            pass
 
     def ok(self):
         idx = self["menu"].getSelectedIndex()
@@ -79,32 +92,22 @@ class BISSPro(Screen):
             self["status"].setText("Downloading Softcam...")
             Thread(target=self.do_update).start()
         elif act == "auto":
-            self["status"].setText("Searching for key...")
             self.do_auto_search()
         else:
-            self.session.open(MessageBox, "This feature will be ready in next step!", MessageBox.TYPE_INFO)
+            self.session.open(MessageBox, "Feature Coming Soon", MessageBox.TYPE_INFO)
 
-    # --- وظيفة التحديث أونلاين ---
     def do_update(self):
         try:
             url = "https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key"
             urlretrieve(url, "/tmp/SoftCam.Key")
             shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
-            self.res_msg = "Softcam Updated Successfully!"
+            self.res_msg = "Softcam Updated!"
         except:
-            self.res_msg = "Update Failed! Check Network."
+            self.res_msg = "Update Failed!"
         self.timer.start(100, True)
 
-    # --- وظيفة البحث التلقائي الذكي ---
     def do_auto_search(self):
-        service = self.session.nav.getCurrentService()
-        if service:
-            info = service.info()
-            name = info.getName()
-            self.session.open(MessageBox, "Searching key for: " + name, MessageBox.TYPE_INFO)
-            # هنا سنضيف كود الربط مع السيرفر في الخطوة القادمة
-        else:
-            self.session.open(MessageBox, "No Active Channel!", MessageBox.TYPE_ERROR)
+        self.session.open(MessageBox, "Searching for Key Online...", MessageBox.TYPE_INFO)
 
     def show_result(self):
         self["status"].setText("Ready")
