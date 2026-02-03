@@ -1,4 +1,4 @@
-# BissPro 🔑  
+# BissPro-Smart 🔑  
 Installation 
 
 wget -qO - https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/install.sh | sh
