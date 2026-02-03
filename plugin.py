@@ -5,14 +5,13 @@ from Screens.MessageBox import MessageBox
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
-from Components.Pixmap import Pixmap
+from Components.ProgressBar import ProgressBar
 from enigma import eTimer, iServiceInformation
-from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time
+import os, re, shutil
 from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
-# تحديد المسار بطريقة تضمن عملها على بايثون 3
+# تحديد مسار البلجن
 PLUGIN_PATH = os.path.dirname(__file__)
 
 def get_softcam_path():
@@ -24,94 +23,82 @@ def get_softcam_path():
 class BISSPro(Screen):
     def __init__(self, session):
         Screen.__init__(self, session)
+        # تم حذف الـ Pixmap المسبب للكراش واستبداله بـ eLabel ملون يعطي شكلاً جمالياً خلف القائمة
         self.skin = """
-        <screen position="center,center" size="900,500" title="BissPro Smart v1.0">
-            <widget name="icon" position="40,80" size="128,128" alphatest="blend" />
-            <widget name="menu" position="200,60" size="650,300" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="60" />
-            <widget name="status" position="20,400" size="860,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
+        <screen position="center,center" size="850,500" title="BissPro Smart v1.0">
+            <eLabel position="10,10" size="830,480" backgroundColor="#1a1a1a" zPosition="-1" />
+            <widget name="menu" position="30,30" size="790,320" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="80" transparent="1" />
+            <eLabel position="30,360" size="790,2" backgroundColor="#f0a30a" />
+            <widget name="status" position="30,380" size="790,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" transparent="1" />
+            <widget name="main_progress" position="150,440" size="550,15" foregroundColor="#00ff00" />
         </screen>"""
         
-        self["icon"] = Pixmap()
         self["status"] = Label("Ready")
+        self["main_progress"] = ProgressBar()
+        
         self.options = [
-            ("Add BISS Key Manually", "add", "add.png"),
-            ("BISS Key Editor", "editor", "editor.png"),
-            ("Update Softcam Online", "upd", "update.png"),
-            ("Smart Auto Search", "auto", "auto.png")
+            ("1. Add BISS Key Manually", "add"),
+            ("2. BISS Key Editor", "editor"),
+            ("3. Update Softcam Online", "upd"),
+            ("4. Smart Auto Search", "auto")
         ]
+        
         self["menu"] = MenuList([x[0] for x in self.options])
+        
         self["actions"] = ActionMap(["OkCancelActions", "DirectionActions"], {
-            "ok": self.ok, "cancel": self.close,
-            "up": self.go_up, "down": self.go_down
+            "ok": self.ok,
+            "cancel": self.close,
+            "up": self["menu"].up,
+            "down": self["menu"].down
         }, -1)
         
         self.timer = eTimer()
         try: self.timer.timeout.connect(self.show_result)
         except: self.timer.callback.append(self.show_result)
-        
-        self.onLayoutFinish.append(self.init_plugin)
-
-    def init_plugin(self):
-        self["menu"].moveToIndex(0)
-        # إجبار الأيقونة على الظهور لأول مرة
-        eTimer.singleShot(100, self.change_selection)
-
-    def go_up(self):
-        self["menu"].up()
-        self.change_selection()
-
-    def go_down(self):
-        self["menu"].down()
-        self.change_selection()
-
-    def change_selection(self):
-        try:
-            idx = self["menu"].getSelectedIndex()
-            if idx is not None:
-                icon_name = self.options[idx][2]
-                # بناء المسار بشكل سليم للصور
-                full_icon_path = os.path.join(PLUGIN_PATH, "icons", icon_name)
-                
-                if os.path.exists(full_icon_path):
-                    self["icon"].instance.setPixmap(LoadPixmap(full_icon_path))
-                    self["icon"].show() # التأكد من تفعيل العرض
-                else:
-                    # محاولة عرض لوجو البلجن إذا فقدت الأيقونة
-                    p_path = os.path.join(PLUGIN_PATH, "plugin.png")
-                    if os.path.exists(p_path):
-                        self["icon"].instance.setPixmap(LoadPixmap(p_path))
-                        self["icon"].show()
-        except:
-            pass
 
     def ok(self):
         idx = self["menu"].getSelectedIndex()
+        if idx is None: return
         act = self.options[idx][1]
         
         if act == "upd":
-            self["status"].setText("Downloading Softcam...")
+            self["status"].setText("Updating Softcam... Please wait")
+            self["main_progress"].setValue(50)
             Thread(target=self.do_update).start()
         elif act == "auto":
-            self.do_auto_search()
-        else:
-            self.session.open(MessageBox, "Feature Coming Soon", MessageBox.TYPE_INFO)
+            self["status"].setText("Searching Online Database...")
+            self["main_progress"].setValue(30)
+            Thread(target=self.do_auto).start()
+        elif act == "add":
+            self.session.open(MessageBox, "Manual Input will open in next update", MessageBox.TYPE_INFO)
+        elif act == "editor":
+            self.session.open(MessageBox, "Key Editor will open in next update", MessageBox.TYPE_INFO)
 
     def do_update(self):
         try:
             url = "https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key"
             urlretrieve(url, "/tmp/SoftCam.Key")
-            shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
-            self.res_msg = "Softcam Updated!"
+            dest = get_softcam_path()
+            shutil.copy("/tmp/SoftCam.Key", dest)
+            self.res_msg = "Successfully updated: " + dest
         except:
-            self.res_msg = "Update Failed!"
+            self.res_msg = "Network Error! Check your internet connection."
         self.timer.start(100, True)
 
-    def do_auto_search(self):
-        self.session.open(MessageBox, "Searching for Key Online...", MessageBox.TYPE_INFO)
+    def do_auto(self):
+        # محاكاة البحث (سيتم ربطها بسيرفر الشفرات في الخطوة القادمة)
+        import time
+        time.sleep(2)
+        self.res_msg = "Key found for current channel (Simulated)"
+        self.timer.start(100, True)
 
     def show_result(self):
+        self["main_progress"].setValue(0)
         self["status"].setText("Ready")
         self.session.open(MessageBox, self.res_msg, MessageBox.TYPE_INFO)
 
-def main(session, **kwargs): session.open(BISSPro)
-def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+def main(session, **kwargs):
+    session.open(BISSPro)
+
+def Plugins(**kwargs):
+    return [PluginDescriptor(name="BissPro Smart", description="BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
