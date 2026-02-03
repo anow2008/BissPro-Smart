@@ -7,16 +7,17 @@ from Components.MenuList import MenuList
 from Components.Label import Label
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, ePicLoad
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
+from Tools.Directories import resolveFilename, SCOPE_PLUGINS
 import os, re, shutil, time
 from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# التعريفات والروابط
+# التعريفات والروابط - تأكد من وجود المجلد بهذا الاسم تماماً
 # ==========================================================
-PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
+PLUGIN_PATH = resolveFilename(SCOPE_PLUGINS, "Extensions/BissPro/")
 VERSION_NUM = "v1.0"
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/version.txt"
 URL_PLUGIN = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/plugin.py"
@@ -88,7 +89,6 @@ class BISSPro(Screen):
         
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
-        
         self.onLayoutFinish.append(self.build_menu)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
@@ -121,7 +121,9 @@ class BISSPro(Screen):
         self["date_label"].setText(time.strftime("%A, %d %B %Y"))
 
     def build_menu(self):
-        icon_dir = PLUGIN_PATH + "icons/"
+        # التأكد من المسار بشكل نهائي
+        icon_dir = os.path.join(PLUGIN_PATH, "icons")
+        
         menu_items = [
             ("Add", "Add BISS Key Manually", "add", "add.png"), 
             ("Key Editor", "Edit or Delete Stored Keys", "editor", "editor.png"), 
@@ -131,18 +133,17 @@ class BISSPro(Screen):
         
         lst = []
         for name, desc, act, icon_name in menu_items:
-            icon_path = os.path.join(icon_dir, icon_name)
-            pixmap = None
-            if os.path.exists(icon_path):
-                # تحميل الأيقونة 128x128 وتمريرها للمحرك
-                pixmap = LoadPixmap(path=icon_path)
+            full_icon_path = os.path.join(icon_dir, icon_name)
+            pix = None
+            if os.path.exists(full_icon_path):
+                pix = LoadPixmap(path=full_icon_path)
             
-            # تعديل حجم العرض إلى 70x70 لضمان التنسيق مع نصوص القائمة
-            res = (name, [
+            # ترتيب الـ MultiContent لضمان ظهور الأيقونة 128x128 داخل إطار 70x70
+            lst.append((name, [
                 MultiContentEntryPixmapAlphaTest(
                     pos=(self.ui.px(15), self.ui.px(15)), 
                     size=(self.ui.px(70), self.ui.px(70)), 
-                    png=pixmap
+                    png=pix
                 ), 
                 MultiContentEntryText(
                     pos=(self.ui.px(110), self.ui.px(10)), 
@@ -155,8 +156,7 @@ class BISSPro(Screen):
                     font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb
                 ), 
                 act
-            ])
-            lst.append(res)
+            ]))
             
         self["menu"].l.setList(lst)
         self["menu"].l.setItemHeight(self.ui.px(100))
