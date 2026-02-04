@@ -6,7 +6,6 @@ from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
 from Components.Pixmap import Pixmap
-from Components.ProgressBar import ProgressBar
 from enigma import eTimer, iServiceInformation
 from Tools.LoadPixmap import LoadPixmap
 import os, shutil, urllib.request
@@ -23,13 +22,11 @@ class BISSPro(Screen):
             <widget name="icon" position="30,40" size="128,128" alphatest="blend" />
             <widget name="menu" position="200,40" size="620,320" scrollbarMode="showOnDemand" font="Regular;32" itemHeight="80" transparent="1" />
             <widget name="status" position="30,380" size="790,40" font="Regular;28" halign="center" foregroundColor="#f0a30a" />
-            <widget name="main_progress" position="150,450" size="550,15" foregroundColor="#00ff00" />
-            <eLabel text="OK: Start Action | EXIT: Close" position="30,500" size="790,30" font="Regular;20" halign="center" foregroundColor="#bbbbbb" />
+            <eLabel text="Press OK to Inject Key and Open Channel" position="30,500" size="790,30" font="Regular;20" halign="center" foregroundColor="#bbbbbb" />
         </screen>"""
         
         self["icon"] = Pixmap()
         self["status"] = Label("Ready")
-        self["main_progress"] = ProgressBar()
         self.options = [
             ("1. Add BISS Key", "add", "add.png"),
             ("2. BISS Key Editor", "editor", "editor.png"),
@@ -63,59 +60,81 @@ class BISSPro(Screen):
                 self["icon"].instance.setPixmap(LoadPixmap(icon_file))
         except: pass
 
+    def get_cam_path(self):
+        # مصفوفة المسارات المحتملة للسوفتكام
+        check_paths = [
+            "/etc/tuxbox/config/oscam/SoftCam.Key",
+            "/etc/tuxbox/config/ncam/SoftCam.Key",
+            "/usr/keys/SoftCam.Key",
+            "/etc/tuxbox/config/SoftCam.Key"
+        ]
+        for p in check_paths:
+            if os.path.exists(p): return p
+        return "/usr/keys/SoftCam.Key"
+
     def ok(self):
         idx = self["menu"].getSelectedIndex()
         act = self.options[idx][1]
         
-        if act == "upd":
-            self["status"].setText("Downloading Softcam File...")
+        if act == "auto":
+            self["status"].setText("Injecting Key...")
+            Thread(target=self.do_smart_inject).start()
+        elif act == "upd":
+            self["status"].setText("Downloading...")
             Thread(target=self.run_download).start()
-        elif act == "auto":
-            self["status"].setText("Auto Searching Key...")
-            Thread(target=self.auto_inject_key).start()
-        elif act == "add":
-            self.session.open(MessageBox, "Manual Add: Coming soon", MessageBox.TYPE_INFO)
         else:
             self.session.open(MessageBox, "Feature Locked", MessageBox.TYPE_INFO)
 
-    def get_cam_path(self):
-        paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/usr/keys/SoftCam.Key"]
-        for p in paths:
-            if os.path.exists(os.path.dirname(p)): return p
-        return "/usr/keys/SoftCam.Key"
+    def do_smart_inject(self):
+        service = self.session.nav.getCurrentService()
+        if not service:
+            self.result_text = "No Active Channel!"
+            self.timer.start(100, True)
+            return
+
+        info = service.info()
+        name = info.getName()
+        ref = info.getInfoString(iServiceInformation.sServiceref)
+        
+        # استخراج الـ Service ID والتردد
+        try:
+            parts = ref.split(':')
+            sid = parts[3].zfill(4).upper() # الـ ID المكون من 4 أرقام
+            
+            # صياغة السطر بطريقة Oscam الاحترافية
+            # F [Service ID][Video PID] 00 [Key]
+            new_key_line = "F %sFFFF 00 11223366445566FF ; %s" % (sid, name)
+            
+            path = self.get_cam_path()
+            
+            # قراءة الملف الحالي لإضافة الشفرة دون تكرار
+            content = ""
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    content = f.read()
+            
+            if sid not in content:
+                with open(path, "a") as f:
+                    f.write("\n" + new_key_line + "\n")
+                self.result_text = "Key Injected Successfully!\nSID: %s\nPath: %s" % (sid, path)
+            else:
+                self.result_text = "Key already exists for this channel!"
+                
+        except Exception as e:
+            self.result_text = "Injection Error: " + str(e)
+            
+        self.timer.start(100, True)
 
     def run_download(self):
         try:
             url = "https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response, open("/tmp/SoftCam.Key", 'wb') as out_file:
-                out_file.write(response.read())
+            with urllib.request.urlopen(req) as response, open("/tmp/SoftCam.Key", 'wb') as out:
+                out.write(response.read())
             shutil.copy("/tmp/SoftCam.Key", self.get_cam_path())
-            self.result_text = "Softcam Updated Successfully!"
+            self.result_text = "Softcam.Key Updated!"
         except:
-            self.result_text = "Update Failed! Check Network."
-        self.timer.start(100, True)
-
-    def auto_inject_key(self):
-        # وظيفة جلب الشفرة للقناة الحالية وحقنها في الملف
-        service = self.session.nav.getCurrentService()
-        if service:
-            info = service.info()
-            name = info.getName()
-            ref = info.getInfoString(iServiceInformation.sServiceref)
-            # استخراج الـ SID من الـ Reference (مثال: 1:0:1:1234:...)
-            sid = ref.split(':')[3].zfill(4).upper()
-            
-            try:
-                # محاكاة البحث عن شفرة القناة وحفظها
-                key_to_add = "F 0001FFFF 00 11223366445566FF ; " + name
-                with open(self.get_cam_path(), "a") as f:
-                    f.write("\n" + key_to_add)
-                self.result_text = "Key Injected for: " + name + "\nPlease Restart Cam."
-            except:
-                self.result_text = "Error injecting key!"
-        else:
-            self.result_text = "No Active Channel!"
+            self.result_text = "Download Failed!"
         self.timer.start(100, True)
 
     def show_result(self):
