@@ -56,25 +56,31 @@ class BISSPro(Screen):
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
-            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1"/>
-            <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
-            <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
-            <eLabel position="{self.ui.px(50)},{self.ui.px(555)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
-            <eLabel position="{self.ui.px(70)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(300)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(530)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(760)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
+            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(400)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1"/>
+            
+            <eLabel position="{self.ui.px(50)},{self.ui.px(490)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
+            <widget name="info_label" position="{self.ui.px(50)},{self.ui.px(500)}" size="{self.ui.px(1000)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="center" foregroundColor="#00ff00" transparent="1" />
+            
+            <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(545)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
+            <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(560)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
+            
+            <eLabel position="{self.ui.px(70)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
+            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(300)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
+            <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(530)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
+            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(760)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            
+            <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
         self["btn_yellow"] = Label("Update File")
         self["btn_blue"] = Label("Auto Search")
+        self["info_label"] = Label("Loading Channel Info...")
         self["version_label"] = Label(f"Version: {VERSION_NUM}")
         self["status"] = Label("Ready")
         self["time_label"] = Label(""); self["date_label"] = Label("")
@@ -92,8 +98,21 @@ class BISSPro(Screen):
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         self.onLayoutFinish.append(self.build_menu)
+        self.onLayoutFinish.append(self.get_channel_info) # استدعاء بيانات القناة
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
+
+    def get_channel_info(self):
+        service = self.session.nav.getCurrentService()
+        if service:
+            info = service.info()
+            ch_name = info.getName()
+            t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            freq = t_data.get("frequency", 0)
+            if freq > 50000: freq = freq / 1000
+            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
+            sid = info.getInfo(iServiceInformation.sSID)
+            self["info_label"].setText(f"Channel: {ch_name} | Freq: {int(freq)} {pol} | SID: {hex(sid).upper().replace('0X', '')}")
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -294,7 +313,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (تم تعديل العرض هنا لضمان عدم نزول السطر)
+# شاشة إدخال الكود (المعدلة والموسعة)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
@@ -334,20 +353,11 @@ class HexInputScreen(Screen):
         self["l_blue"] = Label("Reset All")
         
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
-            "cancel": self.exit_clean, 
-            "red": self.exit_clean, 
-            "green": self.save, 
-            "yellow": self.clear_current, 
-            "blue": self.reset_all,
-            "ok": self.confirm_char,
-            "left": self.move_left, 
-            "right": self.move_right, 
-            "up": self.move_char_up, 
-            "down": self.move_char_down,
+            "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
+            "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
             "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
             "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
-            "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), 
-            "9": lambda: self.keyNum("9")
+            "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
         }, -1)
         
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
@@ -375,41 +385,15 @@ class HexInputScreen(Screen):
         self["char_list"].setText(char_column)
 
     def confirm_char(self):
-        selected_char = self.chars[self.char_index]
-        self.key_list[self.index] = selected_char
-        self.index = min(15, self.index + 1)
-        self.update_display()
-
-    def clear_current(self):
-        self.key_list[self.index] = "0"
-        self.update_display()
-
-    def reset_all(self):
-        self.key_list = ["0"] * 16
-        self.index = 0
-        self.update_display()
-
-    def move_char_up(self):
-        self.char_index = (self.char_index - 1) % len(self.chars)
-        self.update_display()
-
-    def move_char_down(self):
-        self.char_index = (self.char_index + 1) % len(self.chars)
-        self.update_display()
-
-    def keyNum(self, n):
-        self.key_list[self.index] = n
-        self.index = min(15, self.index + 1)
-        self.update_display()
-
-    def move_left(self):
-        self.index = max(0, self.index - 1)
-        self.update_display()
-
-    def move_right(self):
-        self.index = min(15, self.index + 1)
-        self.update_display()
-
+        self.key_list[self.index] = self.chars[self.char_index]
+        self.index = min(15, self.index + 1); self.update_display()
+    def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
+    def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
+    def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.update_display()
+    def move_char_down(self): self.char_index = (self.char_index + 1) % len(self.chars); self.update_display()
+    def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
+    def move_left(self): self.index = max(0, self.index - 1); self.update_display()
+    def move_right(self): self.index = min(15, self.index + 1); self.update_display()
     def exit_clean(self): self.close(None)
     def save(self): self.close("".join(self.key_list))
 
