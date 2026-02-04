@@ -14,10 +14,10 @@ from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات - BissPro Smart v1.4
+# الإعدادات والمسارات - BissPro Smart v1.6
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
-VERSION_NUM = "v1.4"
+VERSION_NUM = "v1.6"
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/version.txt"
 URL_PLUGIN = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt"
@@ -77,48 +77,37 @@ class BISSPro(Screen):
         try: self.timer.callback.append(self.show_result)
         except: self.timer.timeout.connect(self.show_result)
         self["menu"] = MenuList([]); self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
-        self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.check_for_updates)
-        self.update_clock()
+        self.onLayoutFinish.append(self.build_menu); self.onLayoutFinish.append(self.check_for_updates); self.update_clock()
 
     def check_for_updates(self): Thread(target=self.thread_check_version).start()
-
     def thread_check_version(self):
         try:
             url = URL_VERSION + "?nocache=" + str(random.randint(1, 99999))
-            remote_v_raw = urlopen(url, timeout=7).read().decode("utf-8").strip()
-            remote_v = re.sub(r'[^0-9.]', '', remote_v_raw)
+            remote_v = re.sub(r'[^0-9.]', '', urlopen(url, timeout=7).read().decode("utf-8").strip())
             current_v = re.sub(r'[^0-9.]', '', VERSION_NUM)
             if float(remote_v) > float(current_v):
                 self.timer_upd = eTimer()
-                try: self.timer_upd.callback.append(lambda: self.session.openWithCallback(self.install_update, MessageBox, f"New Update v{remote_v} Available!\nInstall now?", MessageBox.TYPE_YESNO))
-                except: self.timer_upd.timeout.connect(lambda: self.session.openWithCallback(self.install_update, MessageBox, f"New Update v{remote_v} Available!\nInstall now?", MessageBox.TYPE_YESNO))
+                try: self.timer_upd.callback.append(lambda: self.session.openWithCallback(self.install_update, MessageBox, f"New Update v{remote_v} Available!", MessageBox.TYPE_YESNO))
+                except: self.timer_upd.timeout.connect(lambda: self.session.openWithCallback(self.install_update, MessageBox, f"New Update v{remote_v} Available!", MessageBox.TYPE_YESNO))
                 self.timer_upd.start(500, True)
         except: pass
-
     def install_update(self, answer):
         if answer: self["status"].setText("Updating..."); Thread(target=self.do_plugin_download).start()
-
     def do_plugin_download(self):
-        try:
-            urlretrieve(URL_PLUGIN, PLUGIN_PATH + "plugin.py"); self.res = (True, "Plugin Updated! Please Restart GUI.")
-        except: self.res = (False, "Update Failed!")
+        try: urlretrieve(URL_PLUGIN, PLUGIN_PATH + "plugin.py"); self.res = (True, "Success! Restart GUI.")
+        except: self.res = (False, "Failed!")
         self.timer.start(100, True)
 
-    def update_clock(self):
-        self["time_label"].setText(time.strftime("%H:%M:%S")); self["date_label"].setText(time.strftime("%A, %d %B %Y"))
-
+    def update_clock(self): self["time_label"].setText(time.strftime("%H:%M:%S")); self["date_label"].setText(time.strftime("%A, %d %B %Y"))
     def build_menu(self):
-        icon_dir = PLUGIN_PATH + "icons/"
-        menu_items = [("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), ("Smart Auto Search", "Search current channel key online", "auto", icon_dir + "auto.png")]
+        icon_dir = PLUGIN_PATH + "icons/"; menu_items = [("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), ("Smart Auto Search", "Search current channel key online", "auto", icon_dir + "auto.png")]
         lst = []
         for name, desc, act, icon_path in menu_items:
             pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
             res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), act])
             lst.append(res)
         self["menu"].l.setList(lst)
-        if hasattr(self["menu"].l, 'setFont'): 
-            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        if hasattr(self["menu"].l, 'setFont'): self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -128,13 +117,10 @@ class BISSPro(Screen):
             elif act == "editor": self.action_editor()
             elif act == "upd": self.action_update()
             elif act == "auto": self.action_auto()
-
     def action_add(self):
         service = self.session.nav.getCurrentService()
         if service: self.session.openWithCallback(self.manual_done, HexInputScreen, service.info().getName())
-
     def action_editor(self): self.session.open(BissManagerList)
-
     def manual_done(self, key=None):
         if key is None: return
         service = self.session.nav.getCurrentService()
@@ -143,7 +129,6 @@ class BISSPro(Screen):
         if self.save_biss_key(full_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
-
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
@@ -155,60 +140,42 @@ class BISSPro(Screen):
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
             with open(target, "w") as f: f.writelines(lines); restart_softcam_global(); return True
         except: return False
-
-    def show_result(self): 
-        self["main_progress"].setValue(0); self["status"].setText("Ready")
-        self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
-
-    def action_update(self): 
-        self["status"].setText("Updating Softcam..."); self["main_progress"].setValue(50); Thread(target=self.do_update).start()
-
+    def show_result(self): self["main_progress"].setValue(0); self["status"].setText("Ready"); self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
+    def action_update(self): self["status"].setText("Updating..."); self["main_progress"].setValue(50); Thread(target=self.do_update).start()
     def do_update(self):
-        try:
-            urlretrieve("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", "/tmp/SoftCam.Key")
-            shutil.copy("/tmp/SoftCam.Key", get_softcam_path()); restart_softcam_global(); self.res = (True, "Updated Success")
-        except: self.res = (False, "Update Failed")
+        try: urlretrieve("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", "/tmp/SoftCam.Key"); shutil.copy("/tmp/SoftCam.Key", get_softcam_path()); restart_softcam_global(); self.res = (True, "Updated")
+        except: self.res = (False, "Failed")
         self.timer.start(100, True)
-
     def action_auto(self):
         service = self.session.nav.getCurrentService()
         if service: self["status"].setText("Searching..."); self["main_progress"].setValue(40); Thread(target=self.do_auto, args=(service,)).start()
-
     def do_auto(self, service):
         try:
             info = service.info(); ch_name = info.getName().upper(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq_raw = t_data.get("frequency", 0); curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
             raw_sid = info.getInfo(iServiceInformation.sSID); raw_data = urlopen(DATA_SOURCE, timeout=15).read().decode("utf-8")
-            self["main_progress"].setValue(70)
             pattern_freq = re.escape(curr_freq) + r'[\s\S]{0,800}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern_freq, raw_data, re.I)
             if not m:
-                short_n = re.sub(r'[^A-Z0-9]', '', ch_name)[:4]
-                pattern_name = re.escape(short_n) + r'[\s\S]{0,800}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                short_n = re.sub(r'[^A-Z0-9]', '', ch_name)[:4]; pattern_name = re.escape(short_n) + r'[\s\S]{0,800}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern_name, raw_data, re.I)
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
                     full_id = ("%04X" % (raw_sid & 0xFFFF)) + "FFFF"
-                    if self.save_biss_key(full_id, clean_key, ch_name): self.res = (True, f"Key: {clean_key}")
+                    if self.save_biss_key(full_id, clean_key, ch_name): self.res = (True, f"Key Found")
                     else: self.res = (False, "Save Error")
-                else: self.res = (False, "Invalid Length")
+                else: self.res = (False, "Invalid Key")
             else: self.res = (False, "Not Found")
         except: self.res = (False, "Error")
         self.timer.start(100, True)
 
 class BissManagerList(Screen):
     def __init__(self, session):
-        self.ui = AutoScale()
-        Screen.__init__(self, session)
-        self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro - Key Editor">
+        self.ui = AutoScale(); Screen.__init__(self, session)
+        self.skin = f"""<screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro - Editor">
             <widget name="keylist" position="{self.ui.px(20)},{self.ui.px(20)}" size="{self.ui.px(960)},{self.ui.px(520)}" itemHeight="{self.ui.px(50)}" scrollbarMode="showOnDemand" />
             <eLabel position="0,{self.ui.px(560)}" size="{self.ui.px(1000)},{self.ui.px(140)}" backgroundColor="#252525" zPosition="-1" />
-            <eLabel position="{self.ui.px(30)},{self.ui.px(590)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#00ff00" />
-            <eLabel text="GREEN: Edit" position="{self.ui.px(75)},{self.ui.px(585)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
-            <eLabel position="{self.ui.px(30)},{self.ui.px(635)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#ff0000" />
-            <eLabel text="RED: Delete" position="{self.ui.px(75)},{self.ui.px(630)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
         </screen>"""
         self["keylist"] = MenuList([]); self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
         self.onLayoutFinish.append(self.load_keys)
@@ -250,61 +217,56 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود المعدلة v1.4
+# شاشة إدخال الكود المعدلة v1.6 (التبديل العكسي)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
-        self.ui = AutoScale()
-        Screen.__init__(self, session)
-        self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
+        self.ui = AutoScale(); Screen.__init__(self, session)
+        self.skin = f"""<screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(650)}" title="BissPro - Key Input">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(980)},{self.ui.px(60)}" font="Regular;{self.ui.font(42)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(200)},{self.ui.px(100)}" size="{self.ui.px(600)},{self.ui.px(15)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(10)},{self.ui.px(140)}" size="{self.ui.px(980)},{self.ui.px(120)}" font="Regular;{self.ui.font(75)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             <widget name="char_list" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(980)},{self.ui.px(80)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel text="UP/DOWN: Move Pos | LEFT/RIGHT: Select Char | OK: Confirm" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(980)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
+            <eLabel text="UP/DOWN: Change Char | LEFT/RIGHT: Move Pos | OK: Confirm" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(980)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1000)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
-            <eLabel position="{self.ui.px(50)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="l_red" position="{self.ui.px(85)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(280)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="l_green" position="{self.ui.px(315)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(510)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="l_yellow" position="{self.ui.px(545)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(740)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="l_blue" position="{self.ui.px(775)},{self.ui.px(480)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
         self["channel"] = Label(f"{channel_name}"); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
-        self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Delete"); self["l_blue"] = Label("Reset")
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
             "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
-            "ok": self.confirm_selection, "up": self.move_left, "down": self.move_right, "left": self.move_char_up, "right": self.move_char_down,
+            "ok": self.confirm_selection, 
+            "up": self.move_char_up,      # فوق: يغير الحرف
+            "down": self.move_char_down,  # تحت: يغير الحرف
+            "left": self.move_left,       # يسار: يرجع خانة
+            "right": self.move_right,     # يمين: يتقدم خانة
             "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
         }, -1)
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
-        self.index = 0; self.chars = ["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F"]; self.char_index = 0; self.update_display()
+        self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0; self.update_display()
 
     def update_display(self):
         dp = []
         for i in range(16):
-            char = self.key_list[i]
-            dp.append("[%s]" % char if i == self.index else char)
+            char = self.key_list[i]; dp.append("[%s]" % char if i == self.index else char)
             if (i + 1) % 4 == 0 and i < 15: dp.append(" - ")
         self["keylabel"].setText("".join(dp)); self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
+        current_char = self.key_list[self.index]
+        if current_char in self.chars: self.char_index = self.chars.index(current_char)
         cb = ""
         for i, c in enumerate(self.chars): cb += "\c00f0a30a[ %s ] " % c if i == self.char_index else "\c00ffffff %s  " % c
         self["char_list"].setText(cb)
 
-    def confirm_selection(self):
-        self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
-    def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
-    def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
-    def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.update_display()
-    def move_char_down(self): self.char_index = (self.char_index + 1) % len(self.chars); self.update_display()
-    def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
+    def confirm_selection(self): self.index = min(15, self.index + 1); self.update_display()
+    def move_char_up(self): 
+        self.char_index = (self.char_index - 1) % len(self.chars); self.key_list[self.index] = self.chars[self.char_index]; self.update_display()
+    def move_char_down(self): 
+        self.char_index = (self.char_index + 1) % len(self.chars); self.key_list[self.index] = self.chars[self.char_index]; self.update_display()
     def move_left(self): self.index = max(0, self.index - 1); self.update_display()
     def move_right(self): self.index = min(15, self.index + 1); self.update_display()
+    def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
+    def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
+    def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
     def exit_clean(self): self.close(None)
     def save(self): self.close("".join(self.key_list))
 
 def main(session, **kwargs): session.open(BISSPro)
-def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.4", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.6", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
