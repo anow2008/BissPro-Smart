@@ -294,7 +294,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (تعديل: بيانات القناة تحت الشفرة بوضوح)
+# شاشة إدخال الكود (تعديل: لون الشفرة الأصلي والبيانات تحتها)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
@@ -305,9 +305,9 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             
-            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             
-            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
+            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             
@@ -362,7 +362,6 @@ class HexInputScreen(Screen):
             sid = info.getInfo(iServiceInformation.sSID)
             vpid = info.getInfo(iServiceInformation.sVideoPID)
             
-            # تنسيق الأصفار على الشمال (4 خانات)
             sid_hex = "%04X" % (sid & 0xFFFF)
             vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
             
