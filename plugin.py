@@ -9,7 +9,7 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
-from Tools.Directories import resolveFilename, SCOPE_PLUGINS   # <<< التعديل الوحيد (import)
+from Tools.Directories import resolveFilename, SCOPE_PLUGINS   # <<< التعديل (import)
 import os, re, shutil, time
 from urllib.request import urlopen, urlretrieve
 from threading import Thread
@@ -26,8 +26,7 @@ def get_softcam_path():
     paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key",
              "/etc/tuxbox/config/SoftCam.Key", "/usr/keys/SoftCam.Key"]
     for p in paths:
-        if os.path.exists(p):
-            return p
+        if os.path.exists(p): return p
     return "/etc/tuxbox/config/oscam/SoftCam.Key"
 
 def restart_softcam_global():
@@ -37,7 +36,7 @@ def restart_softcam_global():
                "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam"]
     for s in scripts:
         if os.path.exists(s):
-            os.system("'%s' restart >/dev/null 2>&1" % s)
+            os.system(f"'{s}' restart >/dev/null 2>&1")
             break
 
 class AutoScale:
@@ -54,15 +53,11 @@ class BISSPro(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
-        self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart">
-            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}"
-                size="{self.ui.px(1000)},{self.ui.px(410)}"
-                itemHeight="{self.ui.px(100)}" />
-            <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}"
-                size="{self.ui.px(1000)},{self.ui.px(70)}"
-                font="Regular;{self.ui.font(32)}"
-                halign="center" valign="center" />
+        self.skin = f"""<screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart">
+            <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1"/>
+            <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" transparent="1"/>
+            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}"/>
+            <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center"/>
         </screen>"""
 
         self["menu"] = MenuList([])
@@ -73,27 +68,25 @@ class BISSPro(Screen):
             {"ok": self.ok, "cancel": self.close},
             -1
         )
-
         self.onLayoutFinish.append(self.build_menu)
 
     def build_menu(self):
-        icon_dir = PLUGIN_PATH + "icons/"
         menu_items = [
-            ("Add", "Add BISS Key Manually", "add", icon_dir + "add.png"),
-            ("Key Editor", "Edit or Delete Stored Keys", "editor", icon_dir + "editor.png"),
-            ("Update Softcam", "Download latest SoftCam.Key", "upd", icon_dir + "update.png"),
-            ("Smart Auto Search", "Auto find key for current channel", "auto", icon_dir + "auto.png")
+            ("Add", "Add BISS Key Manually", "add", "add.png"),
+            ("Key Editor", "Edit or Delete Stored Keys", "editor", "editor.png"),
+            ("Update Softcam", "Download latest SoftCam.Key", "upd", "update.png"),
+            ("Smart Auto Search", "Auto find key for current channel", "auto", "auto.png")
         ]
 
         lst = []
-        for name, desc, act, icon_path in menu_items:
-            # ===== التعديل الوحيد هنا =====
-            icon = resolveFilename(
+        for name, desc, act, icon_name in menu_items:
+            # ===== التعديل الوحيد =====
+            icon_path = resolveFilename(
                 SCOPE_PLUGINS,
-                "Extensions/BissPro/icons/%s" % os.path.basename(icon_path)
+                "Extensions/BissPro/icons/%s" % icon_name
             )
-            pixmap = LoadPixmap(path=icon)
-            # ============================
+            pixmap = LoadPixmap(path=icon_path)
+            # ========================
 
             res = (
                 name,
@@ -135,12 +128,10 @@ def main(session, **kwargs):
     session.open(BISSPro)
 
 def Plugins(**kwargs):
-    return [
-        PluginDescriptor(
-            name="BissPro Smart",
-            description="Smart BISS Manager",
-            icon="plugin.png",
-            where=PluginDescriptor.WHERE_PLUGINMENU,
-            fnc=main
-        )
-    ]
+    return [PluginDescriptor(
+        name="BissPro Smart",
+        description="Smart BISS Manager",
+        icon="plugin.png",
+        where=PluginDescriptor.WHERE_PLUGINMENU,
+        fnc=main
+    )]
