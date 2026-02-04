@@ -14,12 +14,14 @@ from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# التعريفات والروابط
+# الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
-VERSION_NUM = "v1.0"
+VERSION_NUM = "v1.1" # تم التحديث
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/version.txt"
 URL_PLUGIN = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/plugin.py"
+# رابط السيرفر الذي يحتوي على البيانات (بما فيها الإيموجي والصقور)
+DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt"
 
 def get_softcam_path():
     paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/etc/tuxbox/config/SoftCam.Key", "/usr/keys/SoftCam.Key"]
@@ -50,8 +52,10 @@ class BISSPro(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
+        
+        # تصميم الواجهة - مدمج وقابل للنقل لملف خارجي
         self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart">
+        <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
             <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1"/>
@@ -68,9 +72,10 @@ class BISSPro(Screen):
             <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
+        
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
-        self["btn_yellow"] = Label("Update")
+        self["btn_yellow"] = Label("Update File")
         self["btn_blue"] = Label("Auto Search")
         self["version_label"] = Label(f"Version: {VERSION_NUM}")
         self["status"] = Label("Ready")
@@ -121,15 +126,29 @@ class BISSPro(Screen):
 
     def build_menu(self):
         icon_dir = PLUGIN_PATH + "icons/"
-        menu_items = [("Add", "Add BISS Key Manually", "add", icon_dir + "add.png"), ("Key Editor", "Edit or Delete Stored Keys", "editor", icon_dir + "editor.png"), ("Update Softcam", "Download latest SoftCam.Key", "upd", icon_dir + "update.png"), ("Smart Auto Search", "Auto find key for current channel", "auto", icon_dir + "auto.png")]
+        menu_items = [
+            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
+            ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
+            ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), 
+            ("Smart Auto Search", "Search current channel key online", "auto", icon_dir + "auto.png")
+        ]
         lst = []
         for name, desc, act, icon_path in menu_items:
-            pixmap = LoadPixmap(cached=True, path=icon_path)
-            res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), act])
+            pixmap = None
+            if os.path.exists(icon_path):
+                pixmap = LoadPixmap(cached=True, path=icon_path)
+            
+            res = (name, [
+                MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), 
+                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
+                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), 
+                act
+            ])
             lst.append(res)
         self["menu"].l.setList(lst)
         if hasattr(self["menu"].l, 'setFont'): 
-            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
+            self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -174,48 +193,79 @@ class BISSPro(Screen):
         self["status"].setText("Ready")
         self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
 
-    def action_update(self): self["status"].setText("Updating Softcam..."); self["main_progress"].setValue(50); Thread(target=self.do_update).start()
+    def action_update(self): 
+        self["status"].setText("Updating Softcam File..."); 
+        self["main_progress"].setValue(50); 
+        Thread(target=self.do_update).start()
+
     def do_update(self):
         try:
+            # تحديث ملف SoftCam.Key الكامل
             urlretrieve("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", "/tmp/SoftCam.Key")
-            shutil.copy("/tmp/SoftCam.Key", get_softcam_path()); restart_softcam_global(); self.res = (True, "Softcam Updated")
+            shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
+            restart_softcam_global()
+            self.res = (True, "Softcam File Updated Successfully")
         except: self.res = (False, "Softcam Update Failed")
         self.timer.start(100, True)
 
     def action_auto(self):
         service = self.session.nav.getCurrentService()
-        if service: self["status"].setText("Searching Online..."); self["main_progress"].setValue(40); Thread(target=self.do_auto, args=(service,)).start()
+        if service: 
+            self["status"].setText("Searching Online..."); 
+            self["main_progress"].setValue(40); 
+            Thread(target=self.do_auto, args=(service,)).start()
 
     def do_auto(self, service):
         try:
-            info = service.info(); ch_name = info.getName(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            curr_freq = str(int(t_data.get("frequency", 0) / 1000 if t_data.get("frequency", 0) > 50000 else t_data.get("frequency", 0)))
-            raw_sid = info.getInfo(iServiceInformation.sSID); combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF))
-            raw_data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt", timeout=10).read().decode("utf-8")
+            info = service.info()
+            ch_name = info.getName()
+            t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            
+            # استخراج التردد بدقة
+            freq_raw = t_data.get("frequency", 0)
+            curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            
+            # معرف القناة SID + VPID
+            raw_sid = info.getInfo(iServiceInformation.sSID)
+            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
+            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            
+            # تحميل بيانات المفاتيح
+            raw_data = urlopen(DATA_SOURCE, timeout=12).read().decode("utf-8")
             self["main_progress"].setValue(70)
             
-            # --- المحلل الذكي Smart Parser المحدث ---
-            # يبحث عن التردد، ثم يتخطى أي رموز تعبيرية أو نصوص (حتى 200 حرف) 
-            # ليصطاد أول 16 رقم هكس تأتي بعد هذا التردد مباشرة
-            pattern = re.escape(curr_freq) + r'[\s\S]{0,200}?(([0-9A-Fa-f]{2}[\s\t]*){8})'
+            # --- المحلل الذكي المطور (Smart Parser v1.1) ---
+            # 1. يبحث عن التردد
+            # 2. يتحمل مسافة تصل لـ 500 حرف (لتخطي الإيموجي وأسماء القنوات الطويلة)
+            # 3. يبحث عن 16 رقم هيكس بغض النظر عن الفواصل (مسافة، نقطتين، شرطة)
+            pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern, raw_data, re.I)
             
             if m:
-                key = m.group(1).replace(" ", "").replace("\t", "").upper()
-                if len(key) == 16:
-                    if self.save_biss_key(combined_id, key, ch_name): self.res = (True, f"Key Found: {key}")
-                    else: self.res = (False, "Save Error")
-                else: self.res = (False, "Invalid Key Format Found")
-            else: self.res = (False, f"No Key Found for Freq {curr_freq}")
-        except Exception: self.res = (False, "Network Error")
+                # تنظيف الشفرة المستخرجة من أي رموز غريبة (إيموجي، مسافات، الخ)
+                clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+                if len(clean_key) == 16:
+                    if self.save_biss_key(combined_id, clean_key, ch_name):
+                        self.res = (True, f"Key Found & Saved: {clean_key}")
+                    else:
+                        self.res = (False, "Error Writing to SoftCam.Key")
+                else:
+                    self.res = (False, "Found invalid key length")
+            else:
+                self.res = (False, f"Key not found for freq {curr_freq}")
+        except Exception as e:
+            self.res = (False, f"Error: {str(e)}")
         self.timer.start(100, True)
 
+# ==========================================================
+# شاشة محرر المفاتيح
+# ==========================================================
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
         self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro Smart - Key Editor">
+        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro - Key Editor">
             <widget name="keylist" position="{self.ui.px(20)},{self.ui.px(20)}" size="{self.ui.px(960)},{self.ui.px(520)}" itemHeight="{self.ui.px(50)}" scrollbarMode="showOnDemand" />
             <eLabel position="0,{self.ui.px(560)}" size="{self.ui.px(1000)},{self.ui.px(140)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(30)},{self.ui.px(590)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#00ff00" />
@@ -262,12 +312,15 @@ class BissManagerList(Screen):
                 self.load_keys(); restart_softcam_global()
             except: pass
 
+# ==========================================================
+# شاشة إدخال الكود (Hex Input)
+# ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
         Screen.__init__(self, session)
         self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(650)}" title="BissPro Smart - Key Input" backgroundColor="#1a1a1a">
+        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(980)},{self.ui.px(60)}" font="Regular;{self.ui.font(42)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(200)},{self.ui.px(100)}" size="{self.ui.px(600)},{self.ui.px(15)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(10)},{self.ui.px(140)}" size="{self.ui.px(980)},{self.ui.px(120)}" font="Regular;{self.ui.font(75)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
@@ -319,4 +372,4 @@ class HexInputScreen(Screen):
     def save(self): self.close("".join(self.key_list))
 
 def main(session, **kwargs): session.open(BISSPro)
-def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
