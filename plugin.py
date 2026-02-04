@@ -74,7 +74,7 @@ class BISSPro(Screen):
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
         self["btn_yellow"] = Label("Update File")
-        self["btn_blue"] = Label("Auto Search")
+        self["btn_blue"] = Label("Autoroll") # تم التغيير هنا
         self["version_label"] = Label(f"Version: {VERSION_NUM}")
         self["status"] = Label("Ready")
         self["time_label"] = Label(""); self["date_label"] = Label("")
@@ -128,7 +128,7 @@ class BISSPro(Screen):
             ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
             ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), 
-            ("Smart Auto Search", "Search current channel key online", "auto", icon_dir + "auto.png")
+            ("Autoroll", "Search current channel key online", "auto", icon_dir + "auto.png") # تم التغيير هنا
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
@@ -208,7 +208,7 @@ class BISSPro(Screen):
     def action_auto(self):
         service = self.session.nav.getCurrentService()
         if service: 
-            self["status"].setText("Searching Online..."); 
+            self["status"].setText("Autorolling..."); # تم التغيير هنا
             self["main_progress"].setValue(40); 
             Thread(target=self.do_auto, args=(service,)).start()
 
@@ -294,7 +294,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (تعديل: لون الشفرة الأصلي والبيانات تحتها)
+# شاشة إدخال الكود
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
@@ -304,25 +304,17 @@ class HexInputScreen(Screen):
         <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
-            
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            
             <eLabel text="OK: Confirm | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(400)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1150)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
-            
             <eLabel position="{self.ui.px(80)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(330)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(580)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(830)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(480)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
@@ -361,10 +353,8 @@ class HexInputScreen(Screen):
             pol = "H" if t_data.get("polarization", 0) == 0 else "V"
             sid = info.getInfo(iServiceInformation.sSID)
             vpid = info.getInfo(iServiceInformation.sVideoPID)
-            
             sid_hex = "%04X" % (sid & 0xFFFF)
             vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
-            
             data_str = f"FREQ: {int(freq)} {pol}   |   SID: {sid_hex}   |   VPID: {vpid_hex}"
             self["channel_data"].setText(data_str)
 
