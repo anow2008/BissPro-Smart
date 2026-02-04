@@ -325,7 +325,7 @@ class HexInputScreen(Screen):
             <widget name="progress" position="{self.ui.px(200)},{self.ui.px(100)}" size="{self.ui.px(600)},{self.ui.px(15)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(10)},{self.ui.px(140)}" size="{self.ui.px(980)},{self.ui.px(120)}" font="Regular;{self.ui.font(75)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             <widget name="char_list" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(980)},{self.ui.px(80)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel text="UP/DOWN: Change A-F | LEFT/RIGHT: Move" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(980)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
+            <eLabel text="OK: Confirm Char | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(980)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1000)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(85)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
@@ -336,15 +336,38 @@ class HexInputScreen(Screen):
             <eLabel position="{self.ui.px(740)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(775)},{self.ui.px(480)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
-        self["channel"] = Label(f"{channel_name}"); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
-        self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear Dig"); self["l_blue"] = Label("Reset All")
+        self["channel"] = Label(f"{channel_name}")
+        self["keylabel"] = Label("")
+        self["char_list"] = Label("")
+        self["progress"] = ProgressBar()
+        self["l_red"] = Label("Exit")
+        self["l_green"] = Label("Save")
+        self["l_yellow"] = Label("Clear Dig")
+        self["l_blue"] = Label("Reset All")
+        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
-            "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
-            "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
-            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
+            "cancel": self.exit_clean, 
+            "red": self.exit_clean, 
+            "green": self.save, 
+            "yellow": self.clear_current, 
+            "blue": self.reset_all,
+            "ok": self.confirm_char, # إضافة زر OK هنا
+            "left": self.move_left, 
+            "right": self.move_right, 
+            "up": self.move_char_up, 
+            "down": self.move_char_down,
+            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
+            "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
+            "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), 
+            "9": lambda: self.keyNum("9")
         }, -1)
+        
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
-        self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0; self.update_display()
+        self.index = 0
+        self.chars = ["A","B","C","D","E","F"]
+        self.char_index = 0
+        self.update_display()
+
     def update_display(self):
         display_parts = []
         for i in range(16):
@@ -354,18 +377,39 @@ class HexInputScreen(Screen):
             if (i + 1) % 4 == 0 and i < 15: display_parts.append(" - ")
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
+        
         char_bar = ""
         color_yellow = "\c00f0a30a"
         color_white = "\c00ffffff"
-        for c in self.chars:
-            if c == self.chars[self.char_index]: char_bar += "%s[ %s ]  " % (color_yellow, c)
+        for i, c in enumerate(self.chars):
+            if i == self.char_index: char_bar += "%s[ %s ]  " % (color_yellow, c)
             else: char_bar += "%s  %s    " % (color_white, c)
         self["char_list"].setText(char_bar)
+
+    def confirm_char(self):
+        # هذه الدالة تجعل زر OK يكتب الحرف المختار وينتقل للخانة التالية
+        selected_char = self.chars[self.char_index]
+        self.key_list[self.index] = selected_char
+        self.index = min(15, self.index + 1)
+        self.update_display()
+
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
     def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
-    def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.key_list[self.index] = self.chars[self.char_index]; self.update_display()
-    def move_char_down(self): self.char_index = (self.char_index + 1) % len(self.chars); self.key_list[self.index] = self.chars[self.char_index]; self.update_display()
-    def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
+    
+    # تعديل: الآن الأزرار فوق وتحت تحرك المؤشر في قائمة الحروف فقط دون تغيير المفتاح فوراً
+    def move_char_up(self): 
+        self.char_index = (self.char_index - 1) % len(self.chars)
+        self.update_display()
+
+    def move_char_down(self): 
+        self.char_index = (self.char_index + 1) % len(self.chars)
+        self.update_display()
+
+    def keyNum(self, n): 
+        self.key_list[self.index] = n
+        self.index = min(15, self.index + 1)
+        self.update_display()
+
     def move_left(self): self.index = max(0, self.index - 1); self.update_display()
     def move_right(self): self.index = min(15, self.index + 1); self.update_display()
     def exit_clean(self): self.close(None)
@@ -373,3 +417,4 @@ class HexInputScreen(Screen):
 
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+
