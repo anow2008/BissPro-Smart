@@ -17,10 +17,9 @@ from threading import Thread
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
-VERSION_NUM = "v1.1" # تم التحديث
+VERSION_NUM = "v1.1"
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/version.txt"
 URL_PLUGIN = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/plugin.py"
-# رابط السيرفر الذي يحتوي على البيانات (بما فيها الإيموجي والصقور)
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt"
 
 def get_softcam_path():
@@ -53,7 +52,6 @@ class BISSPro(Screen):
         self.ui = AutoScale()
         Screen.__init__(self, session)
         
-        # تصميم الواجهة - مدمج وقابل للنقل لملف خارجي
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
@@ -200,7 +198,6 @@ class BISSPro(Screen):
 
     def do_update(self):
         try:
-            # تحديث ملف SoftCam.Key الكامل
             urlretrieve("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", "/tmp/SoftCam.Key")
             shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
             restart_softcam_global()
@@ -220,39 +217,23 @@ class BISSPro(Screen):
             info = service.info()
             ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            
-            # استخراج التردد بدقة
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
-            
-            # معرف القناة SID + VPID
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-            
-            # تحميل بيانات المفاتيح
             raw_data = urlopen(DATA_SOURCE, timeout=12).read().decode("utf-8")
             self["main_progress"].setValue(70)
-            
-            # --- المحلل الذكي المطور (Smart Parser v1.1) ---
-            # 1. يبحث عن التردد
-            # 2. يتحمل مسافة تصل لـ 500 حرف (لتخطي الإيموجي وأسماء القنوات الطويلة)
-            # 3. يبحث عن 16 رقم هيكس بغض النظر عن الفواصل (مسافة، نقطتين، شرطة)
             pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern, raw_data, re.I)
-            
             if m:
-                # تنظيف الشفرة المستخرجة من أي رموز غريبة (إيموجي، مسافات، الخ)
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
                     if self.save_biss_key(combined_id, clean_key, ch_name):
                         self.res = (True, f"Key Found & Saved: {clean_key}")
-                    else:
-                        self.res = (False, "Error Writing to SoftCam.Key")
-                else:
-                    self.res = (False, "Found invalid key length")
-            else:
-                self.res = (False, f"Key not found for freq {curr_freq}")
+                    else: self.res = (False, "Error Writing to SoftCam.Key")
+                else: self.res = (False, "Found invalid key length")
+            else: self.res = (False, f"Key not found for freq {curr_freq}")
         except Exception as e:
             self.res = (False, f"Error: {str(e)}")
         self.timer.start(100, True)
@@ -313,30 +294,35 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (Hex Input)
+# شاشة إدخال الكود (تم تعديل العرض هنا لضمان عدم نزول السطر)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
         Screen.__init__(self, session)
         self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
-            <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(980)},{self.ui.px(60)}" font="Regular;{self.ui.font(42)}" halign="center" foregroundColor="#00ff00" transparent="1" />
-            <widget name="progress" position="{self.ui.px(200)},{self.ui.px(100)}" size="{self.ui.px(600)},{self.ui.px(15)}" foregroundColor="#00ff00" />
-            <widget name="keylabel" position="{self.ui.px(10)},{self.ui.px(140)}" size="{self.ui.px(750)},{self.ui.px(120)}" font="Regular;{self.ui.font(75)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
+        <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
+            <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(42)}" halign="center" foregroundColor="#00ff00" transparent="1" />
+            <widget name="progress" position="{self.ui.px(175)},{self.ui.px(100)}" size="{self.ui.px(800)},{self.ui.px(15)}" foregroundColor="#00ff00" />
             
-            <widget name="char_list" position="{self.ui.px(800)},{self.ui.px(130)}" size="{self.ui.px(150)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(140)}" size="{self.ui.px(1100)},{self.ui.px(120)}" font="Regular;{self.ui.font(72)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             
-            <eLabel text="OK: Confirm Char | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(980)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
-            <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1000)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
-            <eLabel position="{self.ui.px(50)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="l_red" position="{self.ui.px(85)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(280)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="l_green" position="{self.ui.px(315)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(510)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="l_yellow" position="{self.ui.px(545)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(740)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="l_blue" position="{self.ui.px(775)},{self.ui.px(480)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(130)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            
+            <eLabel text="OK: Confirm Char | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
+            <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1150)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
+            
+            <eLabel position="{self.ui.px(80)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
+            <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            
+            <eLabel position="{self.ui.px(330)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
+            <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            
+            <eLabel position="{self.ui.px(580)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
+            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            
+            <eLabel position="{self.ui.px(830)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(480)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
         self["channel"] = Label(f"{channel_name}")
         self["keylabel"] = Label("")
@@ -371,7 +357,6 @@ class HexInputScreen(Screen):
         self.update_display()
 
     def update_display(self):
-        # الجزء الخاص بعرض الشفرة (16 خانة)
         display_parts = []
         for i in range(16):
             char = self.key_list[i]
@@ -381,19 +366,15 @@ class HexInputScreen(Screen):
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
         
-        # الجزء الخاص بعرض الحروف رأسياً [A]
         char_column = ""
         color_yellow = "\c00f0a30a"
         color_white = "\c00ffffff"
         for i, c in enumerate(self.chars):
-            if i == self.char_index:
-                char_column += "%s[%s]\n" % (color_yellow, c)
-            else:
-                char_column += "%s %s \n" % (color_white, c)
+            if i == self.char_index: char_column += "%s[%s]\n" % (color_yellow, c)
+            else: char_column += "%s %s \n" % (color_white, c)
         self["char_list"].setText(char_column)
 
     def confirm_char(self):
-        # يكتب الحرف المختار وينتقل للخانة التالية
         selected_char = self.chars[self.char_index]
         self.key_list[self.index] = selected_char
         self.index = min(15, self.index + 1)
@@ -429,14 +410,8 @@ class HexInputScreen(Screen):
         self.index = min(15, self.index + 1)
         self.update_display()
 
-    def exit_clean(self):
-        self.close(None)
-
-    def save(self):
-        self.close("".join(self.key_list))
+    def exit_clean(self): self.close(None)
+    def save(self): self.close("".join(self.key_list))
 
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
-
-
-
