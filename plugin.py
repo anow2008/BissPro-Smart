@@ -294,7 +294,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (تعديل: إضافة بيانات القناة)
+# شاشة إدخال الكود (تعديل: بيانات القناة تحت الشفرة بوضوح)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
@@ -302,17 +302,16 @@ class HexInputScreen(Screen):
         Screen.__init__(self, session)
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
-            <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(42)}" halign="center" foregroundColor="#00ff00" transparent="1" />
+            <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
+            <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             
-            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(80)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             
-            <widget name="progress" position="{self.ui.px(175)},{self.ui.px(125)}" size="{self.ui.px(800)},{self.ui.px(15)}" foregroundColor="#00ff00" />
+            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             
-            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(160)}" size="{self.ui.px(1100)},{self.ui.px(120)}" font="Regular;{self.ui.font(72)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
+            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             
-            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(160)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            
-            <eLabel text="OK: Confirm Char | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(400)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
+            <eLabel text="OK: Confirm | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(400)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1150)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
             
             <eLabel position="{self.ui.px(80)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
@@ -362,8 +361,12 @@ class HexInputScreen(Screen):
             pol = "H" if t_data.get("polarization", 0) == 0 else "V"
             sid = info.getInfo(iServiceInformation.sSID)
             vpid = info.getInfo(iServiceInformation.sVideoPID)
-            # عرض التردد و SID و VPID
-            data_str = f"Freq: {int(freq)} {pol}  |  SID: {hex(sid).upper().replace('0X', '')}  |  VPID: {hex(vpid).upper().replace('0X', '') if vpid != -1 else '0000'}"
+            
+            # تنسيق الأصفار على الشمال (4 خانات)
+            sid_hex = "%04X" % (sid & 0xFFFF)
+            vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
+            
+            data_str = f"FREQ: {int(freq)} {pol}   |   SID: {sid_hex}   |   VPID: {vpid_hex}"
             self["channel_data"].setText(data_str)
 
     def update_display(self):
