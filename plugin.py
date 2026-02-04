@@ -65,16 +65,16 @@ class BISSPro(Screen):
             <eLabel position="{self.ui.px(300)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <eLabel position="{self.ui.px(530)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(760)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(580)}" size="{self.ui.px(220)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(790)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
-        self["btn_yellow"] = Label("Update File")
-        self["btn_blue"] = Label("Autoroll") # تم التغيير هنا
+        self["btn_yellow"] = Label("Download Softcam") # تم التعديل هنا ليتناسب مع القائمة
+        self["btn_blue"] = Label("Autoroll")
         self["version_label"] = Label(f"Version: {VERSION_NUM}")
         self["status"] = Label("Ready")
         self["time_label"] = Label(""); self["date_label"] = Label("")
@@ -128,7 +128,7 @@ class BISSPro(Screen):
             ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
             ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), 
-            ("Autoroll", "Search current channel key online", "auto", icon_dir + "auto.png") # تم التغيير هنا
+            ("Autoroll", "Search current channel key online", "auto", icon_dir + "auto.png")
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
@@ -192,7 +192,7 @@ class BISSPro(Screen):
         self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
 
     def action_update(self): 
-        self["status"].setText("Updating Softcam File..."); 
+        self["status"].setText("Downloading Softcam File..."); 
         self["main_progress"].setValue(50); 
         Thread(target=self.do_update).start()
 
@@ -208,7 +208,7 @@ class BISSPro(Screen):
     def action_auto(self):
         service = self.session.nav.getCurrentService()
         if service: 
-            self["status"].setText("Autorolling..."); # تم التغيير هنا
+            self["status"].setText("Autorolling..."); 
             self["main_progress"].setValue(40); 
             Thread(target=self.do_auto, args=(service,)).start()
 
