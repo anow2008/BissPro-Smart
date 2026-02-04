@@ -354,8 +354,8 @@ class HexInputScreen(Screen):
             "ok": self.confirm_char, # إضافة زر OK هنا
             "left": self.move_left, 
             "right": self.move_right, 
-            "up": self.move_char_up, 
-            "down": self.move_char_down,
+            "up": self.move_char_down, 
+            "down": self.move_char_up,
             "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
             "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
             "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), 
@@ -417,4 +417,5 @@ class HexInputScreen(Screen):
 
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+
 
