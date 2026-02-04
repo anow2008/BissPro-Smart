@@ -56,31 +56,25 @@ class BISSPro(Screen):
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
-            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(400)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1"/>
-            
-            <eLabel position="{self.ui.px(50)},{self.ui.px(490)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
-            <widget name="info_label" position="{self.ui.px(50)},{self.ui.px(500)}" size="{self.ui.px(1000)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="center" foregroundColor="#00ff00" transparent="1" />
-            
-            <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(545)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
-            <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(560)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
-            
-            <eLabel position="{self.ui.px(70)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(300)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(530)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(760)},{self.ui.px(615)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(610)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
-            <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
+            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1"/>
+            <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
+            <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
+            <eLabel position="{self.ui.px(50)},{self.ui.px(555)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
+            <eLabel position="{self.ui.px(70)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
+            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(300)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
+            <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(530)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
+            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(760)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="btn_blue" position="{self.ui.px(795)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
         self["btn_yellow"] = Label("Update File")
         self["btn_blue"] = Label("Auto Search")
-        self["info_label"] = Label("Loading Channel Info...")
         self["version_label"] = Label(f"Version: {VERSION_NUM}")
         self["status"] = Label("Ready")
         self["time_label"] = Label(""); self["date_label"] = Label("")
@@ -98,21 +92,8 @@ class BISSPro(Screen):
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.get_channel_info) # استدعاء بيانات القناة
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
-
-    def get_channel_info(self):
-        service = self.session.nav.getCurrentService()
-        if service:
-            info = service.info()
-            ch_name = info.getName()
-            t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            freq = t_data.get("frequency", 0)
-            if freq > 50000: freq = freq / 1000
-            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
-            sid = info.getInfo(iServiceInformation.sSID)
-            self["info_label"].setText(f"Channel: {ch_name} | Freq: {int(freq)} {pol} | SID: {hex(sid).upper().replace('0X', '')}")
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -313,7 +294,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (المعدلة والموسعة)
+# شاشة إدخال الكود (تعديل: إضافة بيانات القناة)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
@@ -322,13 +303,16 @@ class HexInputScreen(Screen):
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(42)}" halign="center" foregroundColor="#00ff00" transparent="1" />
-            <widget name="progress" position="{self.ui.px(175)},{self.ui.px(100)}" size="{self.ui.px(800)},{self.ui.px(15)}" foregroundColor="#00ff00" />
             
-            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(140)}" size="{self.ui.px(1100)},{self.ui.px(120)}" font="Regular;{self.ui.font(72)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
+            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(80)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             
-            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(130)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            <widget name="progress" position="{self.ui.px(175)},{self.ui.px(125)}" size="{self.ui.px(800)},{self.ui.px(15)}" foregroundColor="#00ff00" />
             
-            <eLabel text="OK: Confirm Char | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(380)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
+            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(160)}" size="{self.ui.px(1100)},{self.ui.px(120)}" font="Regular;{self.ui.font(72)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
+            
+            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(160)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            
+            <eLabel text="OK: Confirm Char | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(400)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1150)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
             
             <eLabel position="{self.ui.px(80)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
@@ -344,6 +328,7 @@ class HexInputScreen(Screen):
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(480)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
         self["channel"] = Label(f"{channel_name}")
+        self["channel_data"] = Label("")
         self["keylabel"] = Label("")
         self["char_list"] = Label("")
         self["progress"] = ProgressBar()
@@ -364,7 +349,22 @@ class HexInputScreen(Screen):
         self.index = 0
         self.chars = ["A","B","C","D","E","F"]
         self.char_index = 0
+        self.onLayoutFinish.append(self.get_active_channel_data)
         self.update_display()
+
+    def get_active_channel_data(self):
+        service = self.session.nav.getCurrentService()
+        if service:
+            info = service.info()
+            t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            freq = t_data.get("frequency", 0)
+            if freq > 50000: freq = freq / 1000
+            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
+            sid = info.getInfo(iServiceInformation.sSID)
+            vpid = info.getInfo(iServiceInformation.sVideoPID)
+            # عرض التردد و SID و VPID
+            data_str = f"Freq: {int(freq)} {pol}  |  SID: {hex(sid).upper().replace('0X', '')}  |  VPID: {hex(vpid).upper().replace('0X', '') if vpid != -1 else '0000'}"
+            self["channel_data"].setText(data_str)
 
     def update_display(self):
         display_parts = []
