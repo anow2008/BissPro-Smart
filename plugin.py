@@ -47,7 +47,7 @@ class AutoScale:
     def font(self, v): return int(max(20, v * self.scale))
 
 # ==========================================================
-# الشاشة الرئيسية (BISSPro)
+# الشاشة الرئيسية
 # ==========================================================
 class BISSPro(Screen):
     def __init__(self, session):
@@ -65,21 +65,21 @@ class BISSPro(Screen):
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             
-            <eLabel position="{self.ui.px(50)},{self.ui.px(555)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
+            <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
             
-            <eLabel position="{self.ui.px(70)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(70)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
+            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(595)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
-            <eLabel position="{self.ui.px(300)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(300)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
+            <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(595)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
-            <eLabel position="{self.ui.px(530)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(220)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(530)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
+            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
-            <eLabel position="{self.ui.px(790)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <eLabel position="{self.ui.px(790)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
-            <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
+            <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
         self["btn_red"] = Label("Add Key")
@@ -267,9 +267,6 @@ class BISSPro(Screen):
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
-# ==========================================================
-# شاشة محرر المفاتيح (BissManagerList)
-# ==========================================================
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -286,7 +283,6 @@ class BissManagerList(Screen):
         self["keylist"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
         self.onLayoutFinish.append(self.load_keys)
-
     def load_keys(self):
         path = get_softcam_path(); keys = []
         if os.path.exists(path):
@@ -294,14 +290,11 @@ class BissManagerList(Screen):
                 for line in f:
                     if line.strip().upper().startswith("F "): keys.append(line.strip())
         self["keylist"].setList(keys)
-
     def edit_key(self):
         current = self["keylist"].getCurrent()
         if current:
-            parts = current.split(); ch_name = current.split(";")[-1] if ";" in current else "Unknown"
-            self.old_line = current
+            parts = current.split(); ch_name = current.split(";")[-1] if ";" in current else "Unknown"; self.old_line = current
             self.session.openWithCallback(self.finish_edit, HexInputScreen, ch_name, parts[3] if len(parts) > 3 else "")
-
     def finish_edit(self, new_key=None):
         if new_key is None: return
         path = get_softcam_path(); parts = self.old_line.split(); parts[3] = str(new_key).upper(); new_line = " ".join(parts)
@@ -313,11 +306,9 @@ class BissManagerList(Screen):
                     else: f.write(line)
             self.load_keys(); restart_softcam_global()
         except: pass
-
     def delete_confirm(self):
         current = self["keylist"].getCurrent()
         if current: self.session.openWithCallback(self.delete_key, MessageBox, "Delete this key?", MessageBox.TYPE_YESNO)
-
     def delete_key(self, answer):
         if answer:
             current = self["keylist"].getCurrent(); path = get_softcam_path()
@@ -329,9 +320,6 @@ class BissManagerList(Screen):
                 self.load_keys(); restart_softcam_global()
             except: pass
 
-# ==========================================================
-# شاشة إدخال الكود (HexInputScreen) - مع التعليمات والألوان
-# ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
@@ -344,21 +332,21 @@ class HexInputScreen(Screen):
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             
-            <eLabel text="OK: Confirm | UP/DOWN: Select A-F | Numbers: Direct Input | Arrows: Move" position="{self.ui.px(10)},{self.ui.px(400)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
+            <eLabel text="OK: Confirm | UP/DOWN: Select A-F | Numbers: Direct Input | Arrows: Move" position="{self.ui.px(10)},{self.ui.px(410)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             
-            <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1150)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
+            <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
             
-            <eLabel position="{self.ui.px(80)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
+            <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             
-            <eLabel position="{self.ui.px(330)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(330)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
+            <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             
-            <eLabel position="{self.ui.px(580)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
+            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             
-            <eLabel position="{self.ui.px(830)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(480)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
         
         self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
@@ -401,7 +389,6 @@ class HexInputScreen(Screen):
             if i == self.char_index: char_col += "\c00f0a30a[%s]\n" % c
             else: char_col += "\c00ffffff %s \n" % c
         self["char_list"].setText(char_col)
-
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
     def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
