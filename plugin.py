@@ -18,12 +18,7 @@ from threading import Thread
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.1"
-
-URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
-URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
-URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
-DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
+VERSION_NUM = "v1.2" # تحديث الإصدار للتأكد من التحميل
 
 def get_softcam_path():
     paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/etc/tuxbox/config/SoftCam.Key", "/usr/keys/SoftCam.Key"]
@@ -56,27 +51,19 @@ class BISSPro(Screen):
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
-            
             <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
             <widget name="main_logo" position="{self.ui.px(720)},{self.ui.px(120)}" size="{self.ui.px(300)},{self.ui.px(300)}" alphatest="blend" transparent="1" zPosition="1" />
-            
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
-            
             <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
-            
             <eLabel position="{self.ui.px(70)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(595)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(280)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="btn_green" position="{self.ui.px(315)},{self.ui.px(595)}" size="{self.ui.px(120)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(460)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="btn_yellow" position="{self.ui.px(495)},{self.ui.px(595)}" size="{self.ui.px(280)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <eLabel position="{self.ui.px(790)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
@@ -104,71 +91,28 @@ class BISSPro(Screen):
         
         self.onLayoutFinish.append(self.build_menu)
         self.onLayoutFinish.append(self.load_main_logo)
-        self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
-    # --- تم تعديل هذه الدالة لحساب الهاش بشكل صحيح ومتوافق مع Oscam ---
+    # --- تم التعديل بناءً على مثالك الحي (الترتيب: SID ثم VPID) ---
     def get_combined_hash(self, service):
         try:
             info = service.info()
             sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
-            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0x1FFF
+            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
             
-            # تحويل البيانات لـ Hex بـ 4 خانات لكل قيمة
-            sid_hex = "%04X" % sid
-            vpid_hex = "%04X" % vpid
+            # الترتيب الذي أعطى النتيجة 17E679FE هو دمج SID + VPID كقيم بايتات
+            # SID = 0001, VPID = 0201 -> 00010201
+            data_to_hash = "%04X%04X" % (sid, vpid)
             
-            # تحويل الـ String إلى Bytes قبل حساب الـ CRC32
-            data_to_hash = sid_hex + vpid_hex
             raw_bytes = binascii.unhexlify(data_to_hash)
             crc = binascii.crc32(raw_bytes) & 0xFFFFFFFF
-            
             return "%08X" % crc
-        except: 
-            return None
+        except: return None
 
     def load_main_logo(self):
         logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
         if os.path.exists(logo_path):
             self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
-
-    def check_for_updates(self):
-        Thread(target=self.thread_check_version).start()
-
-    def thread_check_version(self):
-        try:
-            import ssl
-            ctx = ssl._create_unverified_context()
-            v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
-            remote_data = urlopen(v_url, timeout=10, context=ctx).read().decode("utf-8")
-            remote_search = re.search(r"(\d+\.\d+)", remote_data)
-            if remote_search:
-                remote_v = float(remote_search.group(1))
-                local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
-                if remote_v > local_v:
-                    try:
-                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
-                        update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
-                    except: update_notes = "New features and bug fixes."
-                    msg = "New Version v%s is available!\n\nWhat's New:\n%s\n\nUpdate now?" % (str(remote_v), update_notes)
-                    self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
-        except: pass
-
-    def install_update(self, answer):
-        if answer:
-            self["status"].setText("Updating...")
-            Thread(target=self.do_plugin_download).start()
-
-    def do_plugin_download(self):
-        try:
-            import ssl
-            ctx = ssl._create_unverified_context()
-            new_code = urlopen(URL_PLUGIN, timeout=15, context=ctx).read()
-            plugin_file = os.path.join(PLUGIN_PATH, "plugin.py")
-            with open(plugin_file, "wb") as f: f.write(new_code)
-            self.res = (True, "Updated Successfully! Please Restart Enigma2.")
-        except Exception as e: self.res = (False, "Failed: " + str(e))
-        self.timer.start(100, True)
 
     def update_clock(self):
         self["time_label"].setText(time.strftime("%H:%M:%S"))
@@ -231,9 +175,7 @@ class BISSPro(Screen):
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        # تحسين البحث لحذف الأسطر القديمة المرتبطة بنفس الهاش
-                        if f"F {full_id.upper()}" not in line.upper(): 
-                            lines.append(line)
+                        if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
             with open(target, "w") as f: f.writelines(lines)
             restart_softcam_global(); return True
@@ -253,6 +195,7 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
+            from urllib.request import urlopen
             data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", context=ctx).read()
             with open("/tmp/SoftCam.Key", "wb") as f: f.write(data)
             shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
@@ -280,7 +223,8 @@ class BISSPro(Screen):
             combined_id = self.get_combined_hash(service)
             if not combined_id: combined_id = "%04X0000" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)
             
-            raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
+            from urllib.request import urlopen
+            raw_data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt", timeout=12, context=ctx).read().decode("utf-8")
             self["main_progress"].setValue(70)
             pattern = re.escape(curr_freq) + r'[\s\S]{0,1000}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern, raw_data, re.I)
@@ -391,10 +335,11 @@ class HexInputScreen(Screen):
         if service:
             info = service.info()
             sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
-            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0x1FFF
+            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
             sid_hex = "%04X" % sid
             vpid_hex = "%04X" % vpid
             
+            # عرض الهاش في واجهة الإدخال للتأكد
             data_str = sid_hex + vpid_hex
             h_raw = binascii.unhexlify(data_str)
             h = binascii.crc32(h_raw) & 0xFFFFFFFF
@@ -426,4 +371,4 @@ class HexInputScreen(Screen):
     def save(self): self.close("".join(self.key_list))
 
 def main(session, **kwargs): session.open(BISSPro)
-def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
