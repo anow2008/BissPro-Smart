@@ -15,7 +15,7 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات - لم يتم تغيير أي قيمة رئيسية
+# الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1"
@@ -107,18 +107,25 @@ class BISSPro(Screen):
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
-    # --- دالة حساب الهاش الجديدة بناءً على SID/VPID لـ Oscam ---
+    # --- تم تعديل هذه الدالة لحساب الهاش بشكل صحيح ومتوافق مع Oscam ---
     def get_combined_hash(self, service):
         try:
             info = service.info()
-            sid = info.getInfo(iServiceInformation.sSID)
-            vpid = info.getInfo(iServiceInformation.sVideoPID)
-            vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
-            sid_hex = "%04X" % (sid & 0xFFFF)
+            sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
+            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0x1FFF
+            
+            # تحويل البيانات لـ Hex بـ 4 خانات لكل قيمة
+            sid_hex = "%04X" % sid
+            vpid_hex = "%04X" % vpid
+            
+            # تحويل الـ String إلى Bytes قبل حساب الـ CRC32
             data_to_hash = sid_hex + vpid_hex
-            crc = binascii.crc32(binascii.unhexlify(data_to_hash)) & 0xFFFFFFFF
+            raw_bytes = binascii.unhexlify(data_to_hash)
+            crc = binascii.crc32(raw_bytes) & 0xFFFFFFFF
+            
             return "%08X" % crc
-        except: return None
+        except: 
+            return None
 
     def load_main_logo(self):
         logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
@@ -224,7 +231,9 @@ class BISSPro(Screen):
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
+                        # تحسين البحث لحذف الأسطر القديمة المرتبطة بنفس الهاش
+                        if f"F {full_id.upper()}" not in line.upper(): 
+                            lines.append(line)
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
             with open(target, "w") as f: f.writelines(lines)
             restart_softcam_global(); return True
@@ -268,7 +277,6 @@ class BISSPro(Screen):
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
             
-            # حساب الهاش الجديد للحفظ
             combined_id = self.get_combined_hash(service)
             if not combined_id: combined_id = "%04X0000" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)
             
@@ -382,12 +390,14 @@ class HexInputScreen(Screen):
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
-            sid = info.getInfo(iServiceInformation.sSID)
-            vpid = info.getInfo(iServiceInformation.sVideoPID)
-            vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
-            sid_hex = "%04X" % (sid & 0xFFFF)
+            sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
+            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0x1FFF
+            sid_hex = "%04X" % sid
+            vpid_hex = "%04X" % vpid
+            
             data_str = sid_hex + vpid_hex
-            h = binascii.crc32(binascii.unhexlify(data_str)) & 0xFFFFFFFF
+            h_raw = binascii.unhexlify(data_str)
+            h = binascii.crc32(h_raw) & 0xFFFFFFFF
             self["channel_data"].setText("HASH: %08X | SID: %s | VPID: %s" % (h, sid_hex, vpid_hex))
 
     def update_display(self):
