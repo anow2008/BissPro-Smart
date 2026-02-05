@@ -10,13 +10,14 @@ from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixm
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random
-from urllib.request import urlopen, urlretrieve
+from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات
+# الإعدادات والمسارات - التعديل الذكي هنا
 # ==========================================================
-PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
+# هذا السطر يجلب مسار المجلد الحالي تلقائياً
+PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1"
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
@@ -136,10 +137,17 @@ class BISSPro(Screen):
             import ssl
             ctx = ssl._create_unverified_context()
             new_code = urlopen(URL_PLUGIN, timeout=15, context=ctx).read()
+            
+            # تحديث الصلاحيات للمجلد الحالي
             os.system("chmod 755 " + PLUGIN_PATH)
-            os.system("chmod 755 " + PLUGIN_PATH + "plugin.py")
-            with open(PLUGIN_PATH + "plugin.py", "wb") as f:
+            
+            # الكتابة في ملف plugin.py داخل المجلد الحالي
+            plugin_file = os.path.join(PLUGIN_PATH, "plugin.py")
+            os.system("chmod 755 " + plugin_file)
+            
+            with open(plugin_file, "wb") as f:
                 f.write(new_code)
+            
             self.res = (True, "Plugin Updated Successfully!\nPlease RESTART Enigma2.")
         except Exception as e:
             self.res = (False, "Update Failed: " + str(e))
@@ -150,7 +158,7 @@ class BISSPro(Screen):
         self["date_label"].setText(time.strftime("%A, %d %B %Y"))
 
     def build_menu(self):
-        icon_dir = PLUGIN_PATH + "icons/"
+        icon_dir = os.path.join(PLUGIN_PATH, "icons/")
         menu_items = [
             ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
@@ -270,9 +278,7 @@ class BISSPro(Screen):
             self.res = (False, f"Error: {str(e)}")
         self.timer.start(100, True)
 
-# ==========================================================
-# شاشة محرر المفاتيح
-# ==========================================================
+# محرر المفاتيح وشاشة الإدخال
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -325,9 +331,6 @@ class BissManagerList(Screen):
                 self.load_keys(); restart_softcam_global()
             except: pass
 
-# ==========================================================
-# شاشة إدخال الكود
-# ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
