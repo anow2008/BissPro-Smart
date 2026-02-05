@@ -17,7 +17,7 @@ from threading import Thread
 # الإعدادات والمسارات - الروابط المحدثة
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
-VERSION_NUM = "v1.1"
+VERSION_NUM = "v1.5"
 
 # روابط GitHub الرسمية الخاصة بك
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
@@ -415,3 +415,4 @@ class HexInputScreen(Screen):
 
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs): return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+
