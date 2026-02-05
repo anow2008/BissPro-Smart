@@ -14,13 +14,14 @@ from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات - الروابط المحدثة للمستودع الجديد
+# الإعدادات والمسارات - الروابط المحدثة
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
 VERSION_NUM = "v1.1"
 
-# الروابط الصحيحة للمستودع: BissPro-Smart
+# روابط GitHub الرسمية الخاصة بك
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
+URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
@@ -102,12 +103,11 @@ class BISSPro(Screen):
 
     def thread_check_version(self):
         try:
-            # تخطي الكاش
+            # 1. جلب رقم الإصدار
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
-            req = urlopen(v_url, timeout=10).read().decode("utf-8")
+            remote_data = urlopen(v_url, timeout=10).read().decode("utf-8")
             
-            # استخراج أرقام النسخة
-            remote_search = re.search(r"(\d+\.\d+)", req)
+            remote_search = re.search(r"(\d+\.\d+)", remote_data)
             local_search = re.search(r"(\d+\.\d+)", VERSION_NUM)
             
             if remote_search and local_search:
@@ -115,9 +115,19 @@ class BISSPro(Screen):
                 local_v = float(local_search.group(1))
                 
                 if remote_v > local_v:
-                    self.session.openWithCallback(self.install_update, MessageBox, 
-                        f"New Update Found!\nVersion: {remote_v}\nInstall now?", 
-                        MessageBox.TYPE_YESNO)
+                    # 2. جلب الملاحظات من notes.txt
+                    try:
+                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
+                        update_notes = urlopen(n_url, timeout=7).read().decode("utf-8").strip()
+                    except:
+                        update_notes = "Improvements and bug fixes."
+
+                    # بناء الرسالة
+                    msg = "New Version v%s is available!\n\n" % str(remote_v)
+                    msg += "What's New:\n%s\n\n" % update_notes
+                    msg += "Do you want to update now?"
+                    
+                    self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
