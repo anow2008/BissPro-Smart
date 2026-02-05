@@ -15,12 +15,13 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات الذكية
+# الإعدادات والمسارات - المسار الآن يقرأ Notes
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1"
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
+URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
@@ -46,9 +47,6 @@ class AutoScale:
     def px(self, v): return int(v * self.scale)
     def font(self, v): return int(max(20, v * self.scale))
 
-# ==========================================================
-# الشاشة الرئيسية
-# ==========================================================
 class BISSPro(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -74,17 +72,17 @@ class BISSPro(Screen):
             <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(595)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
             <eLabel position="{self.ui.px(530)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(595)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
             <eLabel position="{self.ui.px(790)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
-        self["btn_yellow"] = Label("Download")
+        self["btn_yellow"] = Label("Update")
         self["btn_blue"] = Label("Autoroll")
         self["version_label"] = Label(f"Ver: {VERSION_NUM}")
         self["status"] = Label("Ready")
@@ -128,10 +126,17 @@ class BISSPro(Screen):
                 remote_v = float(remote_search.group(1))
                 local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
                 if remote_v > local_v:
-                    msg = "New Version v%s is available! Update now?" % str(remote_v)
+                    # قراءة ملف الملاحظات
+                    try:
+                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
+                        update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
+                    except: update_notes = "New features and bug fixes."
+                    
+                    msg = "New Version v%s is available!\n\nWhat's New:\n%s\n\nUpdate now?" % (str(remote_v), update_notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
+    # ... (بقية الكود الخاص بالتحميل وإدخال الشفرات يبقى كما هو)
     def install_update(self, answer):
         if answer:
             self["status"].setText("Updating...")
@@ -144,7 +149,7 @@ class BISSPro(Screen):
             new_code = urlopen(URL_PLUGIN, timeout=15, context=ctx).read()
             plugin_file = os.path.join(PLUGIN_PATH, "plugin.py")
             with open(plugin_file, "wb") as f: f.write(new_code)
-            self.res = (True, "Updated! Please Restart Enigma2.")
+            self.res = (True, "Updated Successfully! Please Restart Enigma2.")
         except Exception as e: self.res = (False, "Failed: " + str(e))
         self.timer.start(100, True)
 
