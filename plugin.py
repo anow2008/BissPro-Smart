@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-# BissPro Smart v1.2
-# Optimized by Gemini AI
-
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
@@ -18,7 +15,7 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والروابط الأساسية
+# الإعدادات والروابط
 # ==========================================================
 VERSION_NUM = "v1.2"
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
@@ -43,7 +40,7 @@ def restart_softcam_global():
             break
 
 # ==========================================================
-# محرك الخدمة التلقائية (The Smart Engine)
+# كلاس المراقب التلقائي (AutoRoll Monitor)
 # ==========================================================
 class BissAutoRollService:
     def __init__(self, session):
@@ -59,16 +56,11 @@ class BissAutoRollService:
         if not service: return
         
         current_ref = service.info().getInfoString(iServiceInformation.sServiceref)
-        # الكاش: لا تكرر الفحص إلا إذا تغيرت القناة
         if current_ref != self.last_service:
             self.last_service = current_ref
             info = service.info()
-            
-            # فلترة: مشفرة؟ + تشفير بيس تحديداً؟
             if info.getInfo(iServiceInformation.sIsCrypted) == 1:
-                caids = info.getInfoObject(iServiceInformation.sCAIDs)
-                if caids and 0x2600 in caids:
-                    Thread(target=self.silent_auto_roll, args=(service,)).start()
+                Thread(target=self.silent_auto_roll, args=(service,)).start()
 
     def silent_auto_roll(self, service):
         try:
@@ -80,8 +72,7 @@ class BissAutoRollService:
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
             
-            # جلب البيانات من ملفك
-            raw_data = urlopen(DATA_SOURCE, timeout=8, context=ctx).read().decode("utf-8")
+            raw_data = urlopen(DATA_SOURCE, timeout=7, context=ctx).read().decode("utf-8")
             pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern, raw_data, re.I)
             
@@ -91,7 +82,7 @@ class BissAutoRollService:
                 vpid = info.getInfo(iServiceInformation.sVideoPID)
                 combined_id = ("%04X%04X" % (sid & 0xFFFF, vpid & 0xFFFF if vpid != -1 else 0))
                 
-                # كتابة الشفرة في SoftCam.Key
+                # حفظ الشفرة
                 target = get_softcam_path()
                 lines = []
                 if os.path.exists(target):
@@ -101,8 +92,10 @@ class BissAutoRollService:
                 lines.append(f"F {combined_id.upper()} 00000000 {clean_key} ;{ch_name}\n")
                 with open(target, "w") as f: f.writelines(lines)
                 
-                # تفعيل الشفرة وإظهار الرسالة المتفق عليها
+                # إعادة تشغيل الإيمو
                 restart_softcam_global()
+                
+                # إظهار رسالة الخيار 1 (الاحترافي)
                 self.session.open(MessageBox, 
                                  f"BissPro Smart:\nKey Updated for [ {ch_name} ]", 
                                  MessageBox.TYPE_INFO, 
@@ -110,7 +103,7 @@ class BissAutoRollService:
         except: pass
 
 # ==========================================================
-# واجهة التحكم (BISSPro Screen)
+# واجهة البلجن (BISSPro)
 # ==========================================================
 class AutoScale:
     def __init__(self):
@@ -152,16 +145,13 @@ class BISSPro(Screen):
         self["time_label"] = Label(""); self["date_label"] = Label("")
         self["main_progress"] = ProgressBar()
         self["main_logo"] = Pixmap()
-        
         self.clock_timer = eTimer()
         try: self.clock_timer.callback.append(self.update_clock)
         except: self.clock_timer.timeout.connect(self.update_clock)
         self.clock_timer.start(1000)
-        
         self.timer = eTimer()
         try: self.timer.callback.append(self.show_result)
         except: self.timer.timeout.connect(self.show_result)
-        
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         self.onLayoutFinish.append(self.build_menu); self.onLayoutFinish.append(self.load_main_logo); self.onLayoutFinish.append(self.check_for_updates)
@@ -177,7 +167,7 @@ class BISSPro(Screen):
             Thread(target=self.do_manual_auto, args=(service,)).start()
 
     def do_manual_auto(self, service):
-        # الكود اليدوي يمكن وضعه هنا بنفس منطق الصامت مع إضافة رسائل واضحة
+        # الكود الذي ينفذ عند الضغط اليدوي على الزر الأزرق (مثل الكود الصامت)
         pass 
 
     def build_menu(self):
@@ -245,7 +235,7 @@ class BISSPro(Screen):
         self.timer.start(100, True)
 
 # ==========================================================
-# تفعيل الخدمة صامتة فور إقلاع الرسيفر
+# تشغيل خدمة المراقبة عند فتح الجهاز
 # ==========================================================
 def sessionstart(reason, **kwargs):
     if "session" in kwargs and reason == 0:
