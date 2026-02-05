@@ -5,6 +5,7 @@ from Screens.MessageBox import MessageBox
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
+from Components.Pixmap import Pixmap
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
@@ -14,9 +15,8 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات - التعديل الذكي هنا
+# الإعدادات والمسارات الذكية
 # ==========================================================
-# هذا السطر يجلب مسار المجلد الحالي تلقائياً
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1"
 
@@ -48,7 +48,7 @@ class AutoScale:
     def font(self, v): return int(max(20, v * self.scale))
 
 # ==========================================================
-# الشاشة الرئيسية
+# الشاشة الرئيسية مع إضافة اللوجو في المنتصف
 # ==========================================================
 class BISSPro(Screen):
     def __init__(self, session):
@@ -59,18 +59,24 @@ class BISSPro(Screen):
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
-            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(1000)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1"/>
+            
+            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
+            
+            <widget name="main_logo" position="{self.ui.px(700)},{self.ui.px(120)}" size="{self.ui.px(300)},{self.ui.px(300)}" alphatest="blend" transparent="1" zPosition="1" />
+            
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(555)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
+            
             <eLabel position="{self.ui.px(70)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <eLabel position="{self.ui.px(300)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="btn_green" position="{self.ui.px(335)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <eLabel position="{self.ui.px(530)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(580)}" size="{self.ui.px(220)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <widget name="btn_yellow" position="{self.ui.px(565)},{self.ui.px(220)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <eLabel position="{self.ui.px(790)},{self.ui.px(585)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(580)}" size="{self.ui.px(180)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(660)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         
@@ -82,6 +88,7 @@ class BISSPro(Screen):
         self["status"] = Label("Ready")
         self["time_label"] = Label(""); self["date_label"] = Label("")
         self["main_progress"] = ProgressBar()
+        self["main_logo"] = Pixmap() # تعريف الأداة لعرض اللوجو
         
         self.clock_timer = eTimer()
         try: self.clock_timer.callback.append(self.update_clock)
@@ -94,9 +101,17 @@ class BISSPro(Screen):
         
         self["menu"] = MenuList([])
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
+        
         self.onLayoutFinish.append(self.build_menu)
+        self.onLayoutFinish.append(self.load_main_logo) # تحميل اللوجو عند الفتح
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
+
+    def load_main_logo(self):
+        # الكود بيبحث عن ملف plugin.png في مجلد البلجن ويظهره في النص
+        logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
+        if os.path.exists(logo_path):
+            self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -107,23 +122,17 @@ class BISSPro(Screen):
             ctx = ssl._create_unverified_context()
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
             remote_data = urlopen(v_url, timeout=10, context=ctx).read().decode("utf-8")
-            
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             local_search = re.search(r"(\d+\.\d+)", VERSION_NUM)
-            
             if remote_search and local_search:
                 remote_v = float(remote_search.group(1))
                 local_v = float(local_search.group(1))
-                
                 if remote_v > local_v:
                     try:
                         n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
                         update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
                     except: update_notes = "Improvements and bug fixes."
-
-                    msg = "New Version v%s is available!\n\n" % str(remote_v)
-                    msg += "What's New:\n%s\n\n" % update_notes
-                    msg += "Do you want to update now?"
+                    msg = "New Version v%s is available!\n\nWhat's New:\n%s\n\nDo you want to update now?" % (str(remote_v), update_notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
@@ -137,17 +146,10 @@ class BISSPro(Screen):
             import ssl
             ctx = ssl._create_unverified_context()
             new_code = urlopen(URL_PLUGIN, timeout=15, context=ctx).read()
-            
-            # تحديث الصلاحيات للمجلد الحالي
             os.system("chmod 755 " + PLUGIN_PATH)
-            
-            # الكتابة في ملف plugin.py داخل المجلد الحالي
             plugin_file = os.path.join(PLUGIN_PATH, "plugin.py")
             os.system("chmod 755 " + plugin_file)
-            
-            with open(plugin_file, "wb") as f:
-                f.write(new_code)
-            
+            with open(plugin_file, "wb") as f: f.write(new_code)
             self.res = (True, "Plugin Updated Successfully!\nPlease RESTART Enigma2.")
         except Exception as e:
             self.res = (False, "Update Failed: " + str(e))
@@ -167,14 +169,11 @@ class BISSPro(Screen):
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
-            pixmap = None
-            if os.path.exists(icon_path):
-                pixmap = LoadPixmap(cached=True, path=icon_path)
-            
+            pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
             res = (name, [
                 MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), 
-                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(850), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
-                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(850), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), 
+                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
+                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), 
                 act
             ])
             lst.append(res)
@@ -269,16 +268,14 @@ class BISSPro(Screen):
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
-                    if self.save_biss_key(combined_id, clean_key, ch_name):
-                        self.res = (True, f"Key Found & Saved: {clean_key}")
+                    if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Key Found & Saved: {clean_key}")
                     else: self.res = (False, "Error Writing to SoftCam.Key")
                 else: self.res = (False, "Found invalid key length")
             else: self.res = (False, f"Key not found for freq {curr_freq}")
-        except Exception as e:
-            self.res = (False, f"Error: {str(e)}")
+        except Exception as e: self.res = (False, f"Error: {str(e)}")
         self.timer.start(100, True)
 
-# محرر المفاتيح وشاشة الإدخال
+# بقية الشاشات (محرر المفاتيح وإدخال الكود) تبقى كما هي
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -342,57 +339,34 @@ class HexInputScreen(Screen):
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel text="OK: Confirm | UP/DOWN: Select A-F | Numbers: Direct Input" position="{self.ui.px(10)},{self.ui.px(400)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(450)}" size="{self.ui.px(1150)},{self.ui.px(200)}" backgroundColor="#252525" zPosition="-1" />
-            <eLabel position="{self.ui.px(80)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(330)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(580)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(480)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(830)},{self.ui.px(485)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(480)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
-        self["channel"] = Label(f"{channel_name}")
-        self["channel_data"] = Label("")
-        self["keylabel"] = Label("")
-        self["char_list"] = Label("")
-        self["progress"] = ProgressBar()
-        self["l_red"] = Label("Exit")
-        self["l_green"] = Label("Save")
-        self["l_yellow"] = Label("Clear Dig")
-        self["l_blue"] = Label("Reset All")
-        
+        self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
+        self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear Dig"); self["l_blue"] = Label("Reset All")
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
             "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
             "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
             "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
-            "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
+            "3": lambda: self.keyNum("4"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
             "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
         }, -1)
-        
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
-        self.index = 0
-        self.chars = ["A","B","C","D","E","F"]
-        self.char_index = 0
-        self.onLayoutFinish.append(self.get_active_channel_data)
-        self.update_display()
-
+        self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
+        self.onLayoutFinish.append(self.get_active_channel_data); self.update_display()
     def get_active_channel_data(self):
         service = self.session.nav.getCurrentService()
         if service:
-            info = service.info()
-            t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq = t_data.get("frequency", 0)
             if freq > 50000: freq = freq / 1000
             pol = "H" if t_data.get("polarization", 0) == 0 else "V"
-            sid = info.getInfo(iServiceInformation.sSID)
-            vpid = info.getInfo(iServiceInformation.sVideoPID)
-            sid_hex = "%04X" % (sid & 0xFFFF)
-            vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
-            data_str = f"FREQ: {int(freq)} {pol}   |   SID: {sid_hex}   |   VPID: {vpid_hex}"
-            self["channel_data"].setText(data_str)
-
+            sid = info.getInfo(iServiceInformation.sSID); vpid = info.getInfo(iServiceInformation.sVideoPID)
+            sid_hex = "%04X" % (sid & 0xFFFF); vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
+            self["channel_data"].setText(f"FREQ: {int(freq)} {pol}   |   SID: {sid_hex}   |   VPID: {vpid_hex}")
     def update_display(self):
         display_parts = []
         for i in range(16):
@@ -402,18 +376,12 @@ class HexInputScreen(Screen):
             if (i + 1) % 4 == 0 and i < 15: display_parts.append("-")
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
-        
         char_column = ""
-        color_yellow = "\c00f0a30a"
-        color_white = "\c00ffffff"
         for i, c in enumerate(self.chars):
-            if i == self.char_index: char_column += "%s[%s]\n" % (color_yellow, c)
-            else: char_column += "%s %s \n" % (color_white, c)
+            if i == self.char_index: char_column += "\c00f0a30a[%s]\n" % c
+            else: char_column += "\c00ffffff %s \n" % c
         self["char_list"].setText(char_column)
-
-    def confirm_char(self):
-        self.key_list[self.index] = self.chars[self.char_index]
-        self.index = min(15, self.index + 1); self.update_display()
+    def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
     def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
     def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.update_display()
