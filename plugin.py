@@ -10,12 +10,12 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random
+import os, re, shutil, time, random, binascii
 from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات
+# الإعدادات والمسارات - لم يتم تغيير أي قيمة رئيسية
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1"
@@ -107,6 +107,19 @@ class BISSPro(Screen):
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
+    # --- دالة حساب الهاش الجديدة بناءً على SID/VPID لـ Oscam ---
+    def get_combined_hash(self, service):
+        try:
+            info = service.info()
+            sid = info.getInfo(iServiceInformation.sSID)
+            vpid = info.getInfo(iServiceInformation.sVideoPID)
+            vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
+            sid_hex = "%04X" % (sid & 0xFFFF)
+            data_to_hash = sid_hex + vpid_hex
+            crc = binascii.crc32(binascii.unhexlify(data_to_hash)) & 0xFFFFFFFF
+            return "%08X" % crc
+        except: return None
+
     def load_main_logo(self):
         logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
         if os.path.exists(logo_path):
@@ -130,7 +143,6 @@ class BISSPro(Screen):
                         n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
                         update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
                     except: update_notes = "New features and bug fixes."
-                    
                     msg = "New Version v%s is available!\n\nWhat's New:\n%s\n\nUpdate now?" % (str(remote_v), update_notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
@@ -158,7 +170,7 @@ class BISSPro(Screen):
     def build_menu(self):
         icon_dir = os.path.join(PLUGIN_PATH, "icons/")
         menu_items = [
-            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
+            ("Add Key", "Manual Entry (SID/VPID Hash)", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
             ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), 
             ("Autoroll", "Search current channel key online", "auto", icon_dir + "auto.png")
@@ -193,24 +205,14 @@ class BISSPro(Screen):
 
     def action_editor(self): self.session.open(BissManagerList)
 
-    # --- تم تعديل manual_done لاستخدام الـ Hash ---
     def manual_done(self, key=None):
         if key is None: return
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
+        combined_id = self.get_combined_hash(service)
+        if not combined_id: combined_id = "%04X0000" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)
         
-        # استخراج الهاش Namespace + SID
-        s_ref = info.getInfoString(iServiceInformation.sServiceref)
-        parts = s_ref.split(':')
-        if len(parts) > 6:
-            sid = parts[3].zfill(4).upper()
-            namespace = parts[6].zfill(8).upper()
-            combined_id = f"{namespace}{sid}" # استخدام الهاش بدلاً من SID+VPID
-        else:
-            # fallback في حال فشل استخراج المرجع
-            combined_id = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
-            
         if self.save_biss_key(combined_id, key, info.getName()): self.res = (True, f"Saved Hash: {combined_id}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
@@ -265,17 +267,19 @@ class BISSPro(Screen):
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
-            raw_sid = info.getInfo(iServiceInformation.sSID)
-            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            
+            # حساب الهاش الجديد للحفظ
+            combined_id = self.get_combined_hash(service)
+            if not combined_id: combined_id = "%04X0000" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)
+            
             raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
             self["main_progress"].setValue(70)
-            pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+            pattern = re.escape(curr_freq) + r'[\s\S]{0,1000}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern, raw_data, re.I)
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
-                    if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Key Found: {clean_key}")
+                    if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Key Found & Hash Saved: {combined_id}")
                     else: self.res = (False, "Write Error")
                 else: self.res = (False, "Invalid key length")
             else: self.res = (False, "Not found for %s" % curr_freq)
@@ -374,18 +378,17 @@ class HexInputScreen(Screen):
         self.onLayoutFinish.append(self.get_active_channel_data)
         self.update_display()
 
-    # --- تم تحديث عرض الهاش في شاشة الإدخال ---
     def get_active_channel_data(self):
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
-            s_ref = info.getInfoString(iServiceInformation.sServiceref)
-            parts = s_ref.split(':')
-            if len(parts) > 6:
-                h = f"{parts[6].zfill(8)}{parts[3].zfill(4)}".upper()
-                self["channel_data"].setText(f"HASH: {h} | NAME: {info.getName()}")
-            else:
-                self["channel_data"].setText(f"NAME: {info.getName()}")
+            sid = info.getInfo(iServiceInformation.sSID)
+            vpid = info.getInfo(iServiceInformation.sVideoPID)
+            vpid_hex = "%04X" % (vpid & 0xFFFF) if vpid != -1 else "0000"
+            sid_hex = "%04X" % (sid & 0xFFFF)
+            data_str = sid_hex + vpid_hex
+            h = binascii.crc32(binascii.unhexlify(data_str)) & 0xFFFFFFFF
+            self["channel_data"].setText("HASH: %08X | SID: %s | VPID: %s" % (h, sid_hex, vpid_hex))
 
     def update_display(self):
         display_parts = []
