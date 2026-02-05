@@ -9,18 +9,20 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time
+import os, re, shutil, time, random
 from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات
+# الإعدادات والمسارات - روابط Github
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
 VERSION_NUM = "v1.1"
-URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/version.txt"
-URL_PLUGIN = "https://raw.githubusercontent.com/anow2008/BissPro/refs/heads/main/plugin.py"
-DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/refs/heads/main/biss.txt"
+
+# الروابط المباشرة (الأضمن للعمل)
+URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/main/version.txt"
+URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro/main/plugin.py"
+DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
 def get_softcam_path():
     paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/etc/tuxbox/config/SoftCam.Key", "/usr/keys/SoftCam.Key"]
@@ -73,7 +75,7 @@ class BISSPro(Screen):
         
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
-        self["btn_yellow"] = Label("Download Softcam") # تم التعديل هنا ليتناسب مع القائمة
+        self["btn_yellow"] = Label("Download Softcam")
         self["btn_blue"] = Label("Autoroll")
         self["version_label"] = Label(f"Version: {VERSION_NUM}")
         self["status"] = Label("Ready")
@@ -100,9 +102,14 @@ class BISSPro(Screen):
 
     def thread_check_version(self):
         try:
-            remote_v = urlopen(URL_VERSION, timeout=7).read().decode("utf-8").strip()
-            current_v = VERSION_NUM.replace("v", "")
-            if float(remote_v) > float(current_v):
+            # تخطي الكاش بطلب رابط فريد
+            url = URL_VERSION + "?nocache=" + str(random.randint(1, 9999))
+            remote_v = urlopen(url, timeout=7).read().decode("utf-8").strip()
+            # استخراج الأرقام فقط للمقارنة
+            remote_num = float(re.sub(r'[^0-9.]', '', remote_v))
+            current_num = float(re.sub(r'[^0-9.]', '', VERSION_NUM))
+            
+            if remote_num > current_num:
                 self.session.openWithCallback(self.install_update, MessageBox, f"New Update v{remote_v} Available!\nInstall now?", MessageBox.TYPE_YESNO)
         except: pass
 
@@ -294,7 +301,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود
+# شاشة إدخال الكود (مع اللون الأصفر والبيانات)
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
