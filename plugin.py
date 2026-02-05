@@ -14,14 +14,14 @@ from urllib.request import urlopen, urlretrieve
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات - روابط Github
+# الإعدادات والمسارات - الروابط المحدثة للمستودع الجديد
 # ==========================================================
 PLUGIN_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/BissPro/"
 VERSION_NUM = "v1.1"
 
-# الروابط المباشرة (الأضمن للعمل)
-URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro/main/version.txt"
-URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro/main/plugin.py"
+# الروابط الصحيحة للمستودع: BissPro-Smart
+URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
+URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
 def get_softcam_path():
@@ -102,15 +102,22 @@ class BISSPro(Screen):
 
     def thread_check_version(self):
         try:
-            # تخطي الكاش بطلب رابط فريد
-            url = URL_VERSION + "?nocache=" + str(random.randint(1, 9999))
-            remote_v = urlopen(url, timeout=7).read().decode("utf-8").strip()
-            # استخراج الأرقام فقط للمقارنة
-            remote_num = float(re.sub(r'[^0-9.]', '', remote_v))
-            current_num = float(re.sub(r'[^0-9.]', '', VERSION_NUM))
+            # تخطي الكاش
+            v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
+            req = urlopen(v_url, timeout=10).read().decode("utf-8")
             
-            if remote_num > current_num:
-                self.session.openWithCallback(self.install_update, MessageBox, f"New Update v{remote_v} Available!\nInstall now?", MessageBox.TYPE_YESNO)
+            # استخراج أرقام النسخة
+            remote_search = re.search(r"(\d+\.\d+)", req)
+            local_search = re.search(r"(\d+\.\d+)", VERSION_NUM)
+            
+            if remote_search and local_search:
+                remote_v = float(remote_search.group(1))
+                local_v = float(local_search.group(1))
+                
+                if remote_v > local_v:
+                    self.session.openWithCallback(self.install_update, MessageBox, 
+                        f"New Update Found!\nVersion: {remote_v}\nInstall now?", 
+                        MessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
@@ -301,7 +308,7 @@ class BissManagerList(Screen):
             except: pass
 
 # ==========================================================
-# شاشة إدخال الكود (مع اللون الأصفر والبيانات)
+# شاشة إدخال الكود
 # ==========================================================
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
