@@ -26,9 +26,22 @@ URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plu
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
 def get_softcam_path():
-    paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/etc/tuxbox/config/SoftCam.Key", "/usr/keys/SoftCam.Key"]
+    paths = [
+        "/etc/tuxbox/config/oscam/SoftCam.Key", 
+        "/etc/tuxbox/config/ncam/SoftCam.Key", 
+        "/etc/tuxbox/config/SoftCam.Key", 
+        "/usr/keys/SoftCam.Key"
+    ]
+    # البحث عن ملف موجود
     for p in paths:
         if os.path.exists(p): return p
+    
+    # إذا لم يوجد ملف، البحث عن أول مجلد متاح
+    for p in paths:
+        if os.path.exists(os.path.dirname(p)):
+            return p
+            
+    # المسار الافتراضي النهائي
     return "/etc/tuxbox/config/oscam/SoftCam.Key"
 
 def restart_softcam_global():
@@ -206,6 +219,8 @@ class BISSPro(Screen):
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
+            target_dir = os.path.dirname(target)
+            if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
@@ -213,6 +228,7 @@ class BISSPro(Screen):
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
             with open(target, "w") as f: f.writelines(lines)
+            os.chmod(target, 0o644)
             restart_softcam_global(); return True
         except: return False
 
@@ -231,11 +247,14 @@ class BISSPro(Screen):
             import ssl
             ctx = ssl._create_unverified_context()
             data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", context=ctx).read()
-            with open("/tmp/SoftCam.Key", "wb") as f: f.write(data)
-            shutil.copy("/tmp/SoftCam.Key", get_softcam_path())
+            target_path = get_softcam_path()
+            target_dir = os.path.dirname(target_path)
+            if not os.path.exists(target_dir): os.makedirs(target_dir)
+            with open(target_path, "wb") as f: f.write(data)
+            os.chmod(target_path, 0o644)
             restart_softcam_global()
             self.res = (True, "Softcam Updated Successfully")
-        except: self.res = (False, "Softcam Update Failed")
+        except Exception as e: self.res = (False, "Softcam Update Failed: " + str(e))
         self.timer.start(100, True)
 
     def action_auto(self):
