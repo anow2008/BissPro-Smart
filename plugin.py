@@ -15,10 +15,10 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات
+# الإعدادات والمسارات - تم تعديل المسار لضمان دقة الوصول للمجلدات
 # ==========================================================
-PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.2" # تم التحديث لدعم التلقائي
+PLUGIN_PATH = os.path.realpath(os.path.dirname(__file__)) + "/"
+VERSION_NUM = "v1.2" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
@@ -153,16 +153,17 @@ class BISSPro(Screen):
         self["date_label"].setText(time.strftime("%A, %d %B %Y"))
 
     def build_menu(self):
-        icon_dir = os.path.join(PLUGIN_PATH, "icons/")
+        # تم تعديل بناء المسار ليكون أكثر استقراراً
+        icon_dir = os.path.join(PLUGIN_PATH, "icons")
         menu_items = [
-            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
-            ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"), 
-            ("Download Softcam", "Full update from server", "upd", icon_dir + "update.png"), 
-            ("Autoroll", "Smart search for current channel", "auto", icon_dir + "auto.png")
+            ("Add Key", "Manual BISS Entry", "add", os.path.join(icon_dir, "add.png")), 
+            ("Key Editor", "Manage stored keys", "editor", os.path.join(icon_dir, "editor.png")), 
+            ("Download Softcam", "Full update from server", "upd", os.path.join(icon_dir, "update.png")), 
+            ("Autoroll", "Smart search for current channel", "auto", os.path.join(icon_dir, "auto.png"))
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
-            pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
+            pixmap = LoadPixmap(path=icon_path) if os.path.exists(icon_path) else None
             res = (name, [
                 MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), 
                 MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
@@ -286,17 +287,13 @@ class BissProServiceWatcher:
         self.is_scanning = False
 
     def on_event(self, event):
-        # يراقب حدث تغير القناة أو بدء العرض
-        if event in (0, 1): # EV_START, EV_PLAYBACK_STARTED
-            self.check_timer.start(5000, True) # ابدأ الفحص بعد 5 ثواني من الوقوف على القناة
+        if event in (0, 1): 
+            self.check_timer.start(5000, True)
 
     def check_service(self):
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
-        info = service.info()
-        # التأكد إذا كانت القناة مشفرة BISS (نظام 0x2600)
-        # ملاحظة: بعض الصور لا تعطي نظام التشفير بسهولة، سنعتمد على محاولة الجلب التلقائي لو القناة مقفولة
         self.is_scanning = True
         Thread(target=self.bg_thread, args=(service,)).start()
 
@@ -317,7 +314,6 @@ class BissProServiceWatcher:
                     raw_sid = info.getInfo(iServiceInformation.sSID)
                     raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
                     combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-                    # حفظ الشفرة تلقائياً في الخلفية
                     target = get_softcam_path()
                     target_dir = os.path.dirname(target)
                     if not os.path.exists(target_dir): os.makedirs(target_dir)
@@ -463,6 +459,6 @@ def Plugins(**kwargs):
 
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
-    if reason == 0 and session is not None: # عند بدء تشغيل الجهاز
+    if reason == 0 and session is not None: 
         if watcher_instance is None:
             watcher_instance = BissProServiceWatcher(session)
