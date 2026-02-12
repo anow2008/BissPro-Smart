@@ -15,7 +15,7 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات - تم تعديل المسار لضمان دقة الوصول للمجلدات
+# الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.realpath(os.path.dirname(__file__)) + "/"
 VERSION_NUM = "v1.2" 
@@ -125,10 +125,6 @@ class BISSPro(Screen):
                 remote_v = float(remote_search.group(1))
                 local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
                 if remote_v > local_v:
-                    try:
-                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
-                        update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
-                    except: update_notes = "New features."
                     msg = "New Version v%s available!\n\nUpdate?" % str(remote_v)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
@@ -153,7 +149,6 @@ class BISSPro(Screen):
         self["date_label"].setText(time.strftime("%A, %d %B %Y"))
 
     def build_menu(self):
-        # تم تعديل بناء المسار ليكون أكثر استقراراً
         icon_dir = os.path.join(PLUGIN_PATH, "icons")
         menu_items = [
             ("Add Key", "Manual BISS Entry", "add", os.path.join(icon_dir, "add.png")), 
@@ -275,7 +270,7 @@ class BISSPro(Screen):
         self.timer.start(100, True)
 
 # ==========================================================
-# الخلفية: المراقب الذكي (Background Scanner)
+# الخلفية: المراقب الذكي المعدل لفحص تشفير BISS فقط
 # ==========================================================
 class BissProServiceWatcher:
     def __init__(self, session):
@@ -294,6 +289,20 @@ class BissProServiceWatcher:
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
+        
+        # --- الفحص الذكي لنظام التشفير ---
+        info = service.info()
+        caids = info.getInfoObject(iServiceInformation.sCAIDs)
+        is_biss = False
+        if caids:
+            for caid in caids:
+                if caid == 0x2600:
+                    is_biss = True
+                    break
+        
+        if not is_biss: return # الخروج إذا لم تكن القناة بيس
+        # -------------------------------
+        
         self.is_scanning = True
         Thread(target=self.bg_thread, args=(service,)).start()
 
@@ -447,7 +456,6 @@ class HexInputScreen(Screen):
     def exit_clean(self): self.close(None)
     def save(self): self.close("".join(self.key_list))
 
-# متغير عالمي لتخزين المراقب لمنع تكراره
 watcher_instance = None
 
 def main(session, **kwargs):
