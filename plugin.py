@@ -67,7 +67,7 @@ def get_biss_hash(sid, vpid):
         return "%04X%04X" % (sid & 0xFFFF, vpid if vpid != -1 else 0)
 
 # ==========================================================
-# الإعدادات والمسارات (الأصلية كما هي)
+# الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.realpath(os.path.dirname(__file__)) + "/"
 VERSION_NUM = "v1.2" 
@@ -116,7 +116,9 @@ class BISSPro(Screen):
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
             <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
-            <widget name="main_logo" position="{self.ui.px(720)},{self.ui.px(120)}" size="{self.ui.px(300)},{self.ui.px(300)}" alphatest="blend" transparent="1" zPosition="1" />
+            
+            <widget name="main_logo" position="{self.ui.px(820)},{self.ui.px(200)}" size="{self.ui.px(120)},{self.ui.px(120)}" alphatest="blend" transparent="1" zPosition="1" />
+            
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
@@ -151,12 +153,27 @@ class BISSPro(Screen):
         except: self.timer.timeout.connect(self.show_result)
         
         self["menu"] = MenuList([])
+        
+        # ربط تغير الاختيار بتحديث الأيقونة
+        self["menu"].onSelectionChanged.append(self.update_menu_logo)
+        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         
         self.onLayoutFinish.append(self.build_menu)
         self.onLayoutFinish.append(self.load_main_logo)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
+
+    def update_menu_logo(self):
+        """دالة تحديث الأيقونة بناءً على العنصر المختار"""
+        curr = self["menu"].getCurrent()
+        if curr:
+            act = curr[1][-1]
+            icon_path = os.path.join(PLUGIN_PATH, "icons", f"{act}.png")
+            if os.path.exists(icon_path):
+                self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
+            else:
+                self.load_main_logo()
 
     def load_main_logo(self):
         logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
@@ -222,6 +239,8 @@ class BISSPro(Screen):
         if hasattr(self["menu"].l, 'setFont'): 
             self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
             self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        # تفعيل أيقونة أول عنصر عند الفتح
+        self.update_menu_logo()
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -243,12 +262,9 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        
-        # --- تعديل: استخدام الهاش الجديد بدلاً من اللزق التقليدي ---
         sid = info.getInfo(iServiceInformation.sSID)
         vpid = info.getInfo(iServiceInformation.sVideoPID)
         combined_id = get_biss_hash(sid, vpid)
-        
         if self.save_biss_key(combined_id, key, info.getName()): self.res = (True, f"Saved with Hash: {combined_id}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
@@ -311,18 +327,13 @@ class BISSPro(Screen):
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
             sr_raw = t_data.get("symbol_rate", 0)
             curr_sr = str(int(sr_raw / 1000 if sr_raw > 1000 else sr_raw))
-
-            # --- تعديل: استخدام الهاش المتقدم هنا أيضاً ---
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = get_biss_hash(raw_sid, raw_vpid)
-            
             raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
             self["main_progress"].setValue(70)
-            
             pattern = r"(?i)" + re.escape(curr_freq) + r".*?" + re.escape(curr_sr) + r"[\s\S]{0,150}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
             m = re.search(pattern, raw_data)
-            
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
@@ -335,9 +346,6 @@ class BISSPro(Screen):
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
-# ==========================================================
-# المراقب الذكي (Watcher) المحدث لدعم الهاش الجديد
-# ==========================================================
 class BissProServiceWatcher:
     def __init__(self, session):
         self.session = session
@@ -355,20 +363,15 @@ class BissProServiceWatcher:
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
-        
         info = service.info()
-        if not info.getInfo(iServiceInformation.sIsCrypted):
-            return
-
+        if not info.getInfo(iServiceInformation.sIsCrypted): return
         caids = info.getInfoObject(iServiceInformation.sCAIDs)
         is_biss = False
         if caids:
             for caid in caids:
                 if caid == 0x2600:
                     is_biss = True; break
-        
         if not is_biss: return 
-        
         self.is_scanning = True
         Thread(target=self.bg_thread, args=(service,)).start()
 
@@ -382,19 +385,15 @@ class BissProServiceWatcher:
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
             sr_raw = t_data.get("symbol_rate", 0)
             curr_sr = str(int(sr_raw / 1000 if sr_raw > 1000 else sr_raw))
-
             raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
             pattern = r"(?i)" + re.escape(curr_freq) + r".*?" + re.escape(curr_sr) + r"[\s\S]{0,150}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
             m = re.search(pattern, raw_data)
-
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
                     raw_sid = info.getInfo(iServiceInformation.sSID)
                     raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-                    # استخدام الهاش الجديد في الواتشر
                     combined_id = get_biss_hash(raw_sid, raw_vpid)
-                    
                     target = get_softcam_path()
                     lines_cam = []
                     if os.path.exists(target):
@@ -408,9 +407,6 @@ class BissProServiceWatcher:
         except: pass
         self.is_scanning = False
 
-# ==========================================================
-# بقية الكلاسات (Manager و HexInput) تبقى كما هي بدون تغيير
-# ==========================================================
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -484,7 +480,7 @@ class HexInputScreen(Screen):
             <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
         self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
         self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Reset All")
@@ -526,20 +522,11 @@ class HexInputScreen(Screen):
     def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
     def move_left(self): self.index = max(0, self.index - 1); self.update_display()
     def move_right(self): self.index = min(15, self.index + 1); self.update_display()
-    def exit_clean(self): self.close(None)
     def save(self): self.close("".join(self.key_list))
-
-watcher_instance = None
+    def exit_clean(self): self.close(None)
 
 def main(session, **kwargs):
     session.open(BISSPro)
 
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
-            PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
-
-def sessionstart(reason, session=None, **kwargs):
-    global watcher_instance
-    if reason == 0 and session is not None: 
-        if watcher_instance is None:
-            watcher_instance = BissProServiceWatcher(session)
+    return [PluginDescriptor(name="BissPro Smart", description="Advanced BISS Key Tool", where=PluginDescriptor.WHERE_PLUGINMENU, icon="plugin.png", fnc=main)]
