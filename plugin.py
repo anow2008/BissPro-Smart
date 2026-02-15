@@ -300,6 +300,11 @@ class BissProServiceWatcher:
         if not service: return
         
         info = service.info()
+        
+        # تحسين: فحص هل القناة مشفرة أولاً لتوفير المعالج
+        if not info.getInfo(iServiceInformation.sIsCrypted):
+            return
+
         # جلب نظام التشفير للقناة الحالية
         caids = info.getInfoObject(iServiceInformation.sCAIDs)
         is_biss = False
