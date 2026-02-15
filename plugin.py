@@ -30,7 +30,6 @@ def generate_crc32_table():
 CRC32_TABLE = generate_crc32_table()
 
 def get_biss_hash(sid, vpid):
-    """دالة حساب الهاش المتوافق مع Oscam/Ncam/Emu باستخدام الجدول الديناميكي"""
     try:
         if vpid == -1: vpid = 0
         data = struct.pack(">HH", sid & 0xFFFF, vpid & 0xFFFF)
@@ -43,12 +42,13 @@ def get_biss_hash(sid, vpid):
         return "%04X%04X" % (sid & 0xFFFF, vpid if vpid != -1 else 0)
 
 # ==========================================================
-# الإعدادات والمسارات
+# الروابط والمسارات (تم إعادتها بالكامل كما طلبت)
 # ==========================================================
 PLUGIN_PATH = os.path.realpath(os.path.dirname(__file__)) + "/"
 VERSION_NUM = "v1.2" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
+URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
@@ -83,9 +83,7 @@ class BISSPro(Screen):
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
             <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
-            
             <widget name="main_logo" position="{self.ui.px(820)},{self.ui.px(200)}" size="{self.ui.px(120)},{self.ui.px(120)}" alphatest="blend" transparent="1" zPosition="1" />
-            
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
@@ -96,7 +94,7 @@ class BISSPro(Screen):
             <eLabel position="{self.ui.px(460)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="btn_yellow" position="{self.ui.px(495)},{self.ui.px(595)}" size="{self.ui.px(280)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <eLabel position="{self.ui.px(790)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
+            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
         </screen>"""
         self["btn_red"] = Label("Add Key"); self["btn_green"] = Label("Editor")
@@ -104,23 +102,17 @@ class BISSPro(Screen):
         self["version_label"] = Label(f"Ver: {VERSION_NUM}"); self["status"] = Label("Ready")
         self["time_label"] = Label(""); self["date_label"] = Label("")
         self["main_progress"] = ProgressBar(); self["main_logo"] = Pixmap()
-        
         self.clock_timer = eTimer()
         try: self.clock_timer.callback.append(self.update_clock)
         except: self.clock_timer.timeout.connect(self.update_clock)
         self.clock_timer.start(1000)
-        
         self.timer = eTimer()
         try: self.timer.callback.append(self.show_result)
         except: self.timer.timeout.connect(self.show_result)
-        
         self["menu"] = MenuList([])
         self["menu"].onSelectionChanged.append(self.update_menu_logo)
-        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
-        self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.load_main_logo)
-        self.onLayoutFinish.append(self.check_for_updates)
+        self.onLayoutFinish.append(self.build_menu); self.onLayoutFinish.append(self.load_main_logo); self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
     def update_menu_logo(self):
