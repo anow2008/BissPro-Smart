@@ -252,25 +252,34 @@ class BISSPro(Screen):
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            sr_raw = t_data.get("symbol_rate", 0)
+            curr_sr = str(int(sr_raw / 1000 if sr_raw > 1000 else sr_raw))
+
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            
             raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
             self["main_progress"].setValue(70)
-            pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
-            m = re.search(pattern, raw_data, re.I)
+            
+            # البحث بنطاق 150 حرفاً كما تم الاتفاق
+            pattern = r"(?i)" + re.escape(curr_freq) + r".*?" + re.escape(curr_sr) + r"[\s\S]{0,150}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
+            m = re.search(pattern, raw_data)
+            
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
-                    if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Key Found: {clean_key}")
+                    if self.save_biss_key(combined_id, clean_key, ch_name):
+                        self.res = (True, f"Key Found: {clean_key}")
                     else: self.res = (False, "Write Error")
                 else: self.res = (False, "Invalid key length")
-            else: self.res = (False, "Not found for %s" % curr_freq)
+            else:
+                self.res = (False, "Not found for %s / %s" % (curr_freq, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
 # ==========================================================
-# الخلفية: المراقب الذكي المعدل لفحص تشفير BISS فقط
+# المراقب الذكي (Watcher) - فحص CAID لحماية الـ CPU
 # ==========================================================
 class BissProServiceWatcher:
     def __init__(self, session):
@@ -290,18 +299,17 @@ class BissProServiceWatcher:
         service = self.session.nav.getCurrentService()
         if not service: return
         
-        # --- الفحص الذكي لنظام التشفير ---
         info = service.info()
+        # جلب نظام التشفير للقناة الحالية
         caids = info.getInfoObject(iServiceInformation.sCAIDs)
         is_biss = False
         if caids:
             for caid in caids:
-                if caid == 0x2600:
-                    is_biss = True
-                    break
+                if caid == 0x2600: # التفتيش يبدأ فقط في حالة تشفير BISS
+                    is_biss = True; break
         
-        if not is_biss: return # الخروج إذا لم تكن القناة بيس
-        # -------------------------------
+        # لو القناة ليست BISS، يتم إيقاف العملية فوراً لتوفير المعالج
+        if not is_biss: return 
         
         self.is_scanning = True
         Thread(target=self.bg_thread, args=(service,)).start()
@@ -314,9 +322,15 @@ class BissProServiceWatcher:
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            sr_raw = t_data.get("symbol_rate", 0)
+            curr_sr = str(int(sr_raw / 1000 if sr_raw > 1000 else sr_raw))
+
             raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
-            pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
-            m = re.search(pattern, raw_data, re.I)
+            
+            # البحث بنطاق 150 حرفاً في الخلفية
+            pattern = r"(?i)" + re.escape(curr_freq) + r".*?" + re.escape(curr_sr) + r"[\s\S]{0,150}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
+            m = re.search(pattern, raw_data)
+
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
@@ -324,15 +338,13 @@ class BissProServiceWatcher:
                     raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
                     combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
                     target = get_softcam_path()
-                    target_dir = os.path.dirname(target)
-                    if not os.path.exists(target_dir): os.makedirs(target_dir)
-                    lines = []
+                    lines_cam = []
                     if os.path.exists(target):
                         with open(target, "r") as f:
-                            for line in f:
-                                if f"F {combined_id.upper()}" not in line.upper(): lines.append(line)
-                    lines.append(f"F {combined_id.upper()} 00000000 {clean_key} ;{ch_name} (Auto)\n")
-                    with open(target, "w") as f: f.writelines(lines)
+                            for l in f:
+                                if f"F {combined_id.upper()}" not in l.upper(): lines_cam.append(l)
+                    lines_cam.append(f"F {combined_id.upper()} 00000000 {clean_key} ;{ch_name} (Auto)\n")
+                    with open(target, "w") as f: f.writelines(lines_cam)
                     os.chmod(target, 0o644)
                     restart_softcam_global()
         except: pass
