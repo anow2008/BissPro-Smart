@@ -130,19 +130,29 @@ class BissProWatcher:
         self.running = False
 
     def on_event(self, event):
+        # حدث تغيير القناة (0 أو 1)
         if event in (0, 1):
+            # التعديل هنا: لو فيه مؤقت شغال لسه من القناة اللي فاتت.. وقفه
+            if self.check_timer.isActive():
+                self.check_timer.stop()
+            # ابدأ عد 5 ثواني جديد للقناة الحالية
             self.check_timer.start(5000, True)
 
     def auto_search(self):
+        # هنا بقى الشروط بتاعتك زي ما هي (مش هتتغير)
         if self.running: return
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
+            # لسه هيتأكد إنها مشفرة (IsCrypted)
             if info.getInfo(iServiceInformation.sIsCrypted):
                 caids = info.getInfoObject(iServiceInformation.sCAIDs)
+                # ولسه هيتأكد إن التشفير بيس (0x2600)
                 if caids and 0x2600 in caids:
                     self.running = True
-                    Thread(target=self.bg_thread, args=(service,)).start()
+                    t = Thread(target=self.bg_thread, args=(service,))
+                    t.daemon = True # حماية إضافية للذاكرة
+                    t.start()
 
     def bg_thread(self, service):
         key = find_key_online(service)
@@ -447,3 +457,4 @@ def main(session, **kwargs):
     session.open(BISSPro)
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+
