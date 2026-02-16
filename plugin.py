@@ -118,7 +118,7 @@ def find_key_online(service):
     return None
 
 # ==========================================================
-# ميزة الخلفية الذكية (The Watcher)
+# ميزة الخلفية الذكية (The Watcher) - تم تحسين الاستقرار هنا
 # ==========================================================
 class BissProWatcher:
     def __init__(self, session):
@@ -130,28 +130,22 @@ class BissProWatcher:
         self.running = False
 
     def on_event(self, event):
-        # حدث تغيير القناة (0 أو 1)
         if event in (0, 1):
-            # التعديل هنا: لو فيه مؤقت شغال لسه من القناة اللي فاتت.. وقفه
             if self.check_timer.isActive():
                 self.check_timer.stop()
-            # ابدأ عد 5 ثواني جديد للقناة الحالية
             self.check_timer.start(5000, True)
 
     def auto_search(self):
-        # هنا بقى الشروط بتاعتك زي ما هي (مش هتتغير)
         if self.running: return
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
-            # لسه هيتأكد إنها مشفرة (IsCrypted)
-            if info.getInfo(iServiceInformation.sIsCrypted):
+            if info and info.getInfo(iServiceInformation.sIsCrypted):
                 caids = info.getInfoObject(iServiceInformation.sCAIDs)
-                # ولسه هيتأكد إن التشفير بيس (0x2600)
                 if caids and 0x2600 in caids:
                     self.running = True
                     t = Thread(target=self.bg_thread, args=(service,))
-                    t.daemon = True # حماية إضافية للذاكرة
+                    t.daemon = True
                     t.start()
 
     def bg_thread(self, service):
@@ -161,7 +155,10 @@ class BissProWatcher:
             ch_name = info.getName()
             h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
             save_to_file(h, key, ch_name + " (Auto)")
-            self.session.open(MessageBox, f"✅ BISS Key Applied: {ch_name}\nChannel should open now.", MessageBox.TYPE_INFO, timeout=3)
+            try:
+                self.session.open(MessageBox, f"✅ BISS Key Applied: {ch_name}\nChannel should open now.", MessageBox.TYPE_INFO, timeout=3)
+            except:
+                pass
         self.running = False
 
 # ==========================================================
@@ -428,8 +425,10 @@ class HexInputScreen(Screen):
         if service:
             info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: return
-            freq = t_data.get("frequency", 0); if freq > 50000: freq = freq / 1000
-            pol = "H" if t_data.get("polarization", 0) == 0 else "V"; sr = t_data.get("symbol_rate", 0); if sr > 1000: sr = sr / 1000
+            freq = t_data.get("frequency", 0); 
+            if freq > 50000: freq = freq / 1000
+            pol = "H" if t_data.get("polarization", 0) == 0 else "V"; sr = t_data.get("symbol_rate", 0); 
+            if sr > 1000: sr = sr / 1000
             self["channel_data"].setText(f"FREQ: {int(freq)} {pol} {int(sr)} | SID: %04X" % (info.getInfo(iServiceInformation.sSID)&0xFFFF))
 
     def update_display(self):
@@ -438,7 +437,8 @@ class HexInputScreen(Screen):
             char = self.key_list[i]; display_parts.append("[%s]" % char if i == self.index else char)
             if (i + 1) % 4 == 0 and i < 15: display_parts.append("-")
         self["keylabel"].setText("".join(display_parts)); self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
-        char_col = ""; for i, c in enumerate(self.chars): char_col += "\c00f0a30a[%s]\n" % c if i == self.char_index else "\c00ffffff %s \n" % c
+        char_col = ""; 
+        for i, c in enumerate(self.chars): char_col += "\c00f0a30a[%s]\n" % c if i == self.char_index else "\c00ffffff %s \n" % c
         self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
@@ -453,8 +453,8 @@ class HexInputScreen(Screen):
 
 _watcher = None
 def main(session, **kwargs):
-    global _watcher; if _watcher is None: _watcher = BissProWatcher(session)
+    global _watcher; 
+    if _watcher is None: _watcher = BissProWatcher(session)
     session.open(BISSPro)
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
-
