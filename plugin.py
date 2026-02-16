@@ -20,7 +20,7 @@ from threading import Thread
 VERSION_NUM = "1.1"
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 
-URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
+URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
@@ -492,3 +492,4 @@ def main(session, **kwargs):
 
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+
