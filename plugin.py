@@ -18,7 +18,7 @@ from threading import Thread
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.2" # تم التحديث لدعم التلقائي
+VERSION_NUM = "v1.2" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
@@ -274,7 +274,7 @@ class BISSPro(Screen):
         self.timer.start(100, True)
 
 # ==========================================================
-# الخلفية: المراقب الذكي (Background Scanner)
+# الخلفية: المراقب الذكي (Background Scanner) - التلقائي
 # ==========================================================
 class BissProServiceWatcher:
     def __init__(self, session):
@@ -286,52 +286,59 @@ class BissProServiceWatcher:
         self.is_scanning = False
 
     def on_event(self, event):
-        # يراقب حدث تغير القناة أو بدء العرض
         if event in (0, 1): # EV_START, EV_PLAYBACK_STARTED
-            self.check_timer.start(5000, True) # ابدأ الفحص بعد 5 ثواني من الوقوف على القناة
+            self.check_timer.start(5000, True) 
 
     def check_service(self):
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # التأكد إذا كانت القناة مشفرة BISS (نظام 0x2600)
-        # ملاحظة: بعض الصور لا تعطي نظام التشفير بسهولة، سنعتمد على محاولة الجلب التلقائي لو القناة مقفولة
-        self.is_scanning = True
-        Thread(target=self.bg_thread, args=(service,)).start()
+        if info.getInfo(iServiceInformation.sIsCrypted):
+            self.is_scanning = True
+            Thread(target=self.bg_do_auto, args=(service,)).start()
 
-    def bg_thread(self, service):
+    def bg_do_auto(self, service):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName()
+            info = service.info()
+            ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            if not t_data: 
+                self.is_scanning = False
+                return
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
-            raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
+            raw_sid = info.getInfo(iServiceInformation.sSID)
+            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
+            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
             pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
             m = re.search(pattern, raw_data, re.I)
             if m:
                 clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                 if len(clean_key) == 16:
-                    raw_sid = info.getInfo(iServiceInformation.sSID)
-                    raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-                    combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-                    # حفظ الشفرة تلقائياً في الخلفية
-                    target = get_softcam_path()
-                    target_dir = os.path.dirname(target)
-                    if not os.path.exists(target_dir): os.makedirs(target_dir)
-                    lines = []
-                    if os.path.exists(target):
-                        with open(target, "r") as f:
-                            for line in f:
-                                if f"F {combined_id.upper()}" not in line.upper(): lines.append(line)
-                    lines.append(f"F {combined_id.upper()} 00000000 {clean_key} ;{ch_name} (Auto)\n")
-                    with open(target, "w") as f: f.writelines(lines)
-                    os.chmod(target, 0o644)
-                    restart_softcam_global()
+                    self.save_biss_key_background(combined_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
+
+    def save_biss_key_background(self, full_id, key, name):
+        target = get_softcam_path()
+        try:
+            target_dir = os.path.dirname(target)
+            if not os.path.exists(target_dir): os.makedirs(target_dir)
+            lines = []
+            if os.path.exists(target):
+                with open(target, "r") as f:
+                    for line in f:
+                        if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
+            with open(target, "w") as f: f.writelines(lines)
+            os.chmod(target, 0o644)
+            restart_softcam_global()
+            return True
+        except: return False
 
 class BissManagerList(Screen):
     def __init__(self, session):
@@ -463,6 +470,6 @@ def Plugins(**kwargs):
 
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
-    if reason == 0 and session is not None: # عند بدء تشغيل الجهاز
+    if reason == 0 and session is not None: 
         if watcher_instance is None:
             watcher_instance = BissProServiceWatcher(session)
