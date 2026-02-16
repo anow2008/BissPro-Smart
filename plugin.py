@@ -10,9 +10,13 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random, struct
+import os, re, shutil, time, random, struct, sys
 from urllib.request import urlopen
 from threading import Thread
+from array import array
+
+# تحديد إصدار بايثون للتوافق
+PY3 = sys.version_info[0] == 3
 
 # ==========================================================
 # الإعدادات والروابط
@@ -45,30 +49,44 @@ def restart_softcam_global():
             break
 
 # ==========================================================
-# دالة حساب الهاش العالمي CRC32
+# تطوير الهاش باستخدام array (التعديل الجديد)
 # ==========================================================
-def generate_crc32_table():
-    table = []
-    for i in range(256):
-        crc = i
-        for _ in range(8):
-            if crc & 1: crc = (crc >> 1) ^ 0xEDB88320
-            else: crc >>= 1
-        table.append(crc)
-    return table
+crc_table = array("L")
+for byte in range(256):
+    crc = 0
+    for bit in range(8):
+        if (byte ^ crc) & 1:
+            crc = (crc >> 1) ^ 0xEDB88320
+        else:
+            crc >>= 1
+        byte >>= 1
+    crc_table.append(crc)
 
-CRC32_TABLE = generate_crc32_table()
+def calculate_crc32_smart(string):
+    # استخدام 0x2600 (BISS CAID) كبداية للحسبة
+    value = 0x2600 ^ 0xffffffff
+    if PY3:
+        if isinstance(string, str):
+            string = string.encode('utf-8')
+        for ch in string:
+            value = crc_table[(ch ^ value) & 0xff] ^ (value >> 8)
+    else:
+        if isinstance(string, unicode):
+            string = string.encode('utf-8')
+        for ch in string:
+            value = crc_table[(ord(ch) ^ value) & 0xff] ^ (value >> 8)
+    return value ^ 0xffffffff
 
 def get_biss_hash(sid, vpid):
     try:
         v_id = vpid if vpid != -1 else 0
-        data = struct.pack(">HH", sid & 0xFFFF, v_id & 0xFFFF)
-        crc = 0x2600 ^ 0xffffffff
-        for byte in data:
-            if not isinstance(byte, int): byte = ord(byte)
-            crc = CRC32_TABLE[(byte ^ crc) & 0xff] ^ (crc >> 8)
-        return "%08X" % (crc ^ 0xffffffff & 0xFFFFFFFF)
-    except: return "%04X0000" % (sid & 0xFFFF)
+        # تحويل SID و VPID إلى نص للحساب بالخوارزمية الجديدة
+        data_str = struct.pack(">HH", sid & 0xFFFF, v_id & 0xFFFF)
+        # استخدام الدالة الذكية الجديدة
+        crc_res = calculate_crc32_smart(data_str)
+        return "%08X" % (crc_res & 0xFFFFFFFF)
+    except: 
+        return "%04X0000" % (sid & 0xFFFF)
 
 # ==========================================================
 # وظائف البحث والحفظ
@@ -98,7 +116,6 @@ def find_key_online(service):
         
         raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
         
-        # البحث المرن في التردد +/- 2 ميجاهرتز
         for f_offset in [0, 1, -1, 2, -2]:
             current_f = str(freq_val + f_offset)
             pattern = r"(?i)" + re.escape(current_f) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r"[\s\S]{0,100}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
@@ -128,8 +145,6 @@ class BissProWatcher:
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
-            # فحص إذا كانت القناة مشفرة (getInfo(sIsCrypted))
-            # وفحص إذا كان نظام التشفير يحتوي على نظام BISS (ID: 0x2600)
             if info.getInfo(iServiceInformation.sIsCrypted):
                 caids = info.getInfoObject(iServiceInformation.sCAIDs)
                 if caids and 0x2600 in caids:
@@ -147,7 +162,7 @@ class BissProWatcher:
         self.running = False
 
 # ==========================================================
-# باقي الكلاسات والشاشات (بدون تغيير)
+# باقي الكلاسات والشاشات
 # ==========================================================
 class AutoScale:
     def __init__(self):
@@ -492,5 +507,3 @@ def main(session, **kwargs):
 
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
-
-
