@@ -92,14 +92,18 @@ def find_key_online(service):
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
         if not t_data: return None
         f_raw = t_data.get("frequency", 0)
-        freq = str(int(f_raw / 1000 if f_raw > 50000 else f_raw))
+        freq_val = int(f_raw / 1000 if f_raw > 50000 else f_raw)
         sr = str(int(t_data.get("symbol_rate", 0) / 1000 if t_data.get("symbol_rate", 0) > 1000 else t_data.get("symbol_rate", 0)))
         pol = "H" if t_data.get("polarization", 0) == 0 else "V"
         
         raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
-        pattern = r"(?i)" + re.escape(freq) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r"[\s\S]{0,100}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
-        m = re.search(pattern, raw_data)
-        if m: return re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+        
+        # البحث عن التردد بنطاق مرن (التردد الحالي، -1، -2، +1، +2)
+        for f_offset in [0, 1, -1, 2, -2]:
+            current_f = str(freq_val + f_offset)
+            pattern = r"(?i)" + re.escape(current_f) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r"[\s\S]{0,100}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
+            m = re.search(pattern, raw_data)
+            if m: return re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
     except: pass
     return None
 
@@ -150,7 +154,6 @@ class BISSPro(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
-        # تم تعديل مقاس main_logo ليكون 128*128 ومكانه مناسب
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
