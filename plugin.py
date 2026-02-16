@@ -90,6 +90,7 @@ def find_key_online(service):
         ctx = ssl._create_unverified_context()
         info = service.info()
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+        if not t_data: return None
         f_raw = t_data.get("frequency", 0)
         freq = str(int(f_raw / 1000 if f_raw > 50000 else f_raw))
         sr = str(int(t_data.get("symbol_rate", 0) / 1000 if t_data.get("symbol_rate", 0) > 1000 else t_data.get("symbol_rate", 0)))
@@ -103,7 +104,7 @@ def find_key_online(service):
     return None
 
 # ==========================================================
-# ميزة الخلفية (The Watcher)
+# ميزة الخلفية الذكية مع التنبيه (The Watcher)
 # ==========================================================
 class BissProWatcher:
     def __init__(self, session):
@@ -115,7 +116,8 @@ class BissProWatcher:
         self.running = False
 
     def on_event(self, event):
-        if event in (0, 1): self.check_timer.start(5000, True)
+        if event in (0, 1): # عند تغيير القناة
+            self.check_timer.start(5000, True)
 
     def auto_search(self):
         if self.running: return
@@ -128,8 +130,11 @@ class BissProWatcher:
         key = find_key_online(service)
         if key:
             info = service.info()
+            ch_name = info.getName()
             h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
-            save_to_file(h, key, info.getName() + " (Auto)")
+            save_to_file(h, key, ch_name + " (Auto)")
+            # إظهار رسالة النجاح لمدة 3 ثوانٍ
+            self.session.open(MessageBox, f"✅ BISS Key Applied: {ch_name}\nChannel should open now.", MessageBox.TYPE_INFO, timeout=3)
         self.running = False
 
 # ==========================================================
@@ -398,6 +403,7 @@ class HexInputScreen(Screen):
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            if not t_data: return
             freq = t_data.get("frequency", 0)
             if freq > 50000: freq = freq / 1000
             pol = "H" if t_data.get("polarization", 0) == 0 else "V"
