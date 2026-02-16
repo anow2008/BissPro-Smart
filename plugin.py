@@ -77,7 +77,7 @@ def get_biss_hash(sid, vpid):
         return "%04X0000" % (sid & 0xFFFF)
 
 # ==========================================================
-# وظائف البحث والحفظ (تم إرجاع Symbol Rate وإلغاء SID)
+# وظائف البحث المتطورة لملفات biss.txt (متعددة الأسطر)
 # ==========================================================
 def save_to_file(h, key, name):
     target = get_softcam_path()
@@ -98,23 +98,22 @@ def find_key_online(service):
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
         if not t_data: return None
         
-        # استخراج البيانات المطلوبة
         f_raw = t_data.get("frequency", 0)
         freq_val = int(f_raw / 1000 if f_raw > 50000 else f_raw)
         pol = "H" if t_data.get("polarization", 0) == 0 else "V"
-        sr = str(int(t_data.get("symbol_rate", 0) / 1000 if t_data.get("symbol_rate", 0) > 1000 else t_data.get("symbol_rate", 0)))
+        sr = int(t_data.get("symbol_rate", 0) / 1000 if t_data.get("symbol_rate", 0) > 1000 else t_data.get("symbol_rate", 0))
         
-        # قراءة ملف المصدر biss.txt
         raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
+        lines = raw_data.splitlines()
         
-        # البحث مع مراعاة وجود التردد والاستقطاب ومعدل الترميز
-        for f_offset in [0, 1, -1, 2, -2]:
-            current_f = str(freq_val + f_offset)
-            # النمط: التردد -> الاستقطاب -> معدل الترميز -> الشفرة (16 حرف هيكسا)
-            pattern = r"(?i)" + re.escape(current_f) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r".*?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
-            m = re.search(pattern, raw_data)
-            if m: 
-                return re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+        for i in range(len(lines)):
+            line = lines[i].strip().upper()
+            if str(freq_val) in line and pol in line and str(sr) in line:
+                for j in range(1, 4):
+                    if i + j < len(lines):
+                        potential_key = lines[i+j].strip().replace(" ", "")
+                        if len(potential_key) == 16 and all(c in "0123456789ABCDEFabcdef" for c in potential_key):
+                            return potential_key.upper()
     except: pass
     return None
 
@@ -156,7 +155,7 @@ class BissProWatcher:
         self.running = False
 
 # ==========================================================
-# باقي الكلاسات والشاشات (بدون أي حذف أو تعديل)
+# باقي الكلاسات والشاشات
 # ==========================================================
 class AutoScale:
     def __init__(self):
@@ -216,21 +215,17 @@ class BISSPro(Screen):
 
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
 
-        self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.check_for_updates)
-        self.update_clock()
+        self.onLayoutFinish.append(self.build_menu); self.onLayoutFinish.append(self.check_for_updates); self.update_clock()
 
     def selectionChanged(self):
         curr = self["menu"].getCurrent()
         if curr:
             icon_path = curr[1][-2]
-            if os.path.exists(icon_path):
-                self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
+            if os.path.exists(icon_path): self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
 
     def update_progress_ui(self):
         self["main_progress"].setValue(self.current_percent)
-        if self.download_finished:
-            self.progress_timer.stop()
+        if self.download_finished: self.progress_timer.stop()
 
     def check_for_updates(self): Thread(target=self.thread_check_version).start()
 
@@ -241,20 +236,16 @@ class BISSPro(Screen):
             remote_data = urlopen(v_url, timeout=10, context=ctx).read().decode("utf-8")
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
-                remote_v = float(remote_search.group(1))
-                local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
+                remote_v = float(remote_search.group(1)); local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
                 if remote_v > local_v:
-                    try:
-                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
-                        update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
+                    try: update_notes = urlopen(URL_NOTES, timeout=7, context=ctx).read().decode("utf-8").strip()
                     except: update_notes = "New features."
-                    msg = "New Version v%s is available!\n\nWhat's New:\n%s\n\nUpdate now?" % (str(remote_v), update_notes)
+                    msg = "New Version v%s is available!\n\nUpdate now?" % str(remote_v)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
-        if answer:
-            self["status"].setText("Updating..."); Thread(target=self.do_plugin_download).start()
+        if answer: self["status"].setText("Updating..."); Thread(target=self.do_plugin_download).start()
 
     def do_plugin_download(self):
         try:
@@ -304,59 +295,37 @@ class BISSPro(Screen):
         if key is None: return
         service = self.session.nav.getCurrentService()
         if not service: return
-        info = service.info()
-        h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
-        save_to_file(h, key, info.getName())
-        self.res = (True, f"Saved: {info.getName()}")
-        self.timer.start(100, True)
+        info = service.info(); h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
+        save_to_file(h, key, info.getName()); self.res = (True, f"Saved: {info.getName()}"); self.timer.start(100, True)
 
     def action_editor(self): self.session.open(BissManagerList)
 
     def action_update(self): 
-        self.current_percent = 0
-        self.download_finished = False
-        self["status"].setText("Downloading Softcam...")
-        self.progress_timer.start(100)
-        Thread(target=self.do_update).start()
+        self.current_percent = 0; self.download_finished = False; self["status"].setText("Downloading Softcam..."); self.progress_timer.start(100); Thread(target=self.do_update).start()
 
     def do_update(self):
         try:
-            import ssl; ctx = ssl._create_unverified_context()
-            req = urlopen(URL_SOFTCAM, context=ctx)
-            total_size = int(req.headers.get('content-length', 0))
-            downloaded = 0
-            chunk_size = 16384
-            
+            import ssl; ctx = ssl._create_unverified_context(); req = urlopen(URL_SOFTCAM, context=ctx)
+            total_size = int(req.headers.get('content-length', 0)); downloaded = 0; chunk_size = 16384
             with open(get_softcam_path(), "wb") as f:
                 while True:
                     chunk = req.read(chunk_size)
                     if not chunk: break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size > 0:
-                        self.current_percent = int(downloaded * 100 / total_size)
-            
-            restart_softcam_global()
-            self.res = (True, "Softcam Updated Successfully")
-        except:
-            self.res = (False, "Softcam Update Failed")
-        
-        self.download_finished = True
-        self.timer.start(100, True)
+                    f.write(chunk); downloaded += len(chunk)
+                    if total_size > 0: self.current_percent = int(downloaded * 100 / total_size)
+            restart_softcam_global(); self.res = (True, "Softcam Updated Successfully")
+        except: self.res = (False, "Softcam Update Failed")
+        self.download_finished = True; self.timer.start(100, True)
 
     def action_auto(self):
         service = self.session.nav.getCurrentService()
-        if service: 
-            self["status"].setText("Searching..."); self["main_progress"].setValue(40)
-            Thread(target=self.do_auto, args=(service,)).start()
+        if service: self["status"].setText("Searching..."); self["main_progress"].setValue(40); Thread(target=self.do_auto, args=(service,)).start()
 
     def do_auto(self, service):
         key = find_key_online(service)
         if key:
-            info = service.info()
-            h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
-            save_to_file(h, key, info.getName())
-            self.res = (True, f"Key Found and Saved")
+            info = service.info(); h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
+            save_to_file(h, key, info.getName()); self.res = (True, f"Key Found and Saved")
         else: self.res = (False, "Not found Online")
         self.timer.start(100, True)
 
@@ -366,8 +335,7 @@ class BISSPro(Screen):
 
 class BissManagerList(Screen):
     def __init__(self, session):
-        self.ui = AutoScale()
-        Screen.__init__(self, session)
+        self.ui = AutoScale(); Screen.__init__(self, session)
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro - Key Editor">
             <widget name="keylist" position="{self.ui.px(20)},{self.ui.px(20)}" size="{self.ui.px(960)},{self.ui.px(520)}" itemHeight="{self.ui.px(50)}" scrollbarMode="showOnDemand" />
@@ -377,9 +345,7 @@ class BissManagerList(Screen):
             <eLabel position="{self.ui.px(30)},{self.ui.px(635)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#ff0000" />
             <eLabel text="RED: Delete" position="{self.ui.px(75)},{self.ui.px(630)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
         </screen>"""
-        self["keylist"] = MenuList([])
-        self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
-        self.onLayoutFinish.append(self.load_keys)
+        self["keylist"] = MenuList([]); self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1); self.onLayoutFinish.append(self.load_keys)
     def load_keys(self):
         path = get_softcam_path(); keys = []
         if os.path.exists(path):
@@ -419,8 +385,7 @@ class BissManagerList(Screen):
 
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
-        self.ui = AutoScale()
-        Screen.__init__(self, session)
+        self.ui = AutoScale(); Screen.__init__(self, session)
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
@@ -428,7 +393,6 @@ class HexInputScreen(Screen):
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel text="OK: Confirm | UP/DOWN: Select A-F | Numbers: Direct Input | Arrows: Move" position="{self.ui.px(10)},{self.ui.px(410)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
@@ -439,45 +403,32 @@ class HexInputScreen(Screen):
             <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
-        
         self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
         self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Reset All")
-        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
             "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
             "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
-            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
-            "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
-            "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
-        }, -1)
-        
-        self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
-        self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
-        self.onLayoutFinish.append(self.get_active_channel_data)
-        self.update_display()
+            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), 
+            "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
+        }, -1); self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
+        self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0; self.onLayoutFinish.append(self.get_active_channel_data); self.update_display()
 
     def get_active_channel_data(self):
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: return
-            freq = t_data.get("frequency", 0)
-            if freq > 50000: freq = freq / 1000
-            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
-            sr = t_data.get("symbol_rate", 0)
-            if sr > 1000: sr = sr / 1000
-            sid = info.getInfo(iServiceInformation.sSID)
-            self["channel_data"].setText(f"FREQ: {int(freq)} {pol} {int(sr)} | SID: %04X" % (sid&0xFFFF))
+            freq = t_data.get("frequency", 0); if freq > 50000: freq = freq / 1000
+            pol = "H" if t_data.get("polarization", 0) == 0 else "V"; sr = t_data.get("symbol_rate", 0); if sr > 1000: sr = sr / 1000
+            self["channel_data"].setText(f"FREQ: {int(freq)} {pol} {int(sr)} | SID: %04X" % (info.getInfo(iServiceInformation.sSID)&0xFFFF))
 
     def update_display(self):
         display_parts = []
         for i in range(16):
             char = self.key_list[i]; display_parts.append("[%s]" % char if i == self.index else char)
             if (i + 1) % 4 == 0 and i < 15: display_parts.append("-")
-        self["keylabel"].setText("".join(display_parts))
-        self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
-        char_col = ""
-        for i, c in enumerate(self.chars): char_col += "\c00f0a30a[%s]\n" % c if i == self.char_index else "\c00ffffff %s \n" % c
+        self["keylabel"].setText("".join(display_parts)); self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
+        char_col = ""; for i, c in enumerate(self.chars): char_col += "\c00f0a30a[%s]\n" % c if i == self.char_index else "\c00ffffff %s \n" % c
         self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
@@ -490,14 +441,9 @@ class HexInputScreen(Screen):
     def exit_clean(self): self.close(None)
     def save(self): self.close("".join(self.key_list))
 
-# ==========================================================
-# تشغيل البلجن
-# ==========================================================
 _watcher = None
 def main(session, **kwargs):
-    global _watcher
-    if _watcher is None: _watcher = BissProWatcher(session)
+    global _watcher; if _watcher is None: _watcher = BissProWatcher(session)
     session.open(BISSPro)
-
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
