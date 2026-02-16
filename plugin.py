@@ -15,9 +15,6 @@ from urllib.request import urlopen
 from threading import Thread
 from array import array
 
-# تحديد إصدار بايثون للتوافق
-PY3 = sys.version_info[0] == 3
-
 # ==========================================================
 # الإعدادات والروابط
 # ==========================================================
@@ -49,7 +46,7 @@ def restart_softcam_global():
             break
 
 # ==========================================================
-# تطوير الهاش باستخدام array (التعديل الجديد)
+# تطوير الهاش (نسخة Python 3)
 # ==========================================================
 crc_table = array("L")
 for byte in range(256):
@@ -62,44 +59,35 @@ for byte in range(256):
         byte >>= 1
     crc_table.append(crc)
 
-def calculate_crc32_smart(string):
-    # استخدام 0x2600 (BISS CAID) كبداية للحسبة
+def calculate_crc32_smart(data):
     value = 0x2600 ^ 0xffffffff
-    if PY3:
-        if isinstance(string, str):
-            string = string.encode('utf-8')
-        for ch in string:
-            value = crc_table[(ch ^ value) & 0xff] ^ (value >> 8)
-    else:
-        if isinstance(string, unicode):
-            string = string.encode('utf-8')
-        for ch in string:
-            value = crc_table[(ord(ch) ^ value) & 0xff] ^ (value >> 8)
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    for ch in data:
+        value = crc_table[(ch ^ value) & 0xff] ^ (value >> 8)
     return value ^ 0xffffffff
 
 def get_biss_hash(sid, vpid):
     try:
         v_id = vpid if vpid != -1 else 0
-        # تحويل SID و VPID إلى نص للحساب بالخوارزمية الجديدة
         data_str = struct.pack(">HH", sid & 0xFFFF, v_id & 0xFFFF)
-        # استخدام الدالة الذكية الجديدة
         crc_res = calculate_crc32_smart(data_str)
         return "%08X" % (crc_res & 0xFFFFFFFF)
     except: 
         return "%04X0000" % (sid & 0xFFFF)
 
 # ==========================================================
-# وظائف البحث والحفظ
+# وظائف البحث والحفظ (تم إرجاع Symbol Rate وإلغاء SID)
 # ==========================================================
 def save_to_file(h, key, name):
     target = get_softcam_path()
     lines = []
     if os.path.exists(target):
-        with open(target, "r") as f:
+        with open(target, "r", encoding="utf-8", errors="ignore") as f:
             for l in f:
                 if f"F {h.upper()}" not in l.upper(): lines.append(l)
     lines.append(f"F {h.upper()} 00000000 {key.upper()} ;{name}\n")
-    with open(target, "w") as f: f.writelines(lines)
+    with open(target, "w", encoding="utf-8") as f: f.writelines(lines)
     restart_softcam_global()
 
 def find_key_online(service):
@@ -109,23 +97,29 @@ def find_key_online(service):
         info = service.info()
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
         if not t_data: return None
+        
+        # استخراج البيانات المطلوبة
         f_raw = t_data.get("frequency", 0)
         freq_val = int(f_raw / 1000 if f_raw > 50000 else f_raw)
-        sr = str(int(t_data.get("symbol_rate", 0) / 1000 if t_data.get("symbol_rate", 0) > 1000 else t_data.get("symbol_rate", 0)))
         pol = "H" if t_data.get("polarization", 0) == 0 else "V"
+        sr = str(int(t_data.get("symbol_rate", 0) / 1000 if t_data.get("symbol_rate", 0) > 1000 else t_data.get("symbol_rate", 0)))
         
+        # قراءة ملف المصدر biss.txt
         raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
         
+        # البحث مع مراعاة وجود التردد والاستقطاب ومعدل الترميز
         for f_offset in [0, 1, -1, 2, -2]:
             current_f = str(freq_val + f_offset)
-            pattern = r"(?i)" + re.escape(current_f) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r"[\s\S]{0,100}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
+            # النمط: التردد -> الاستقطاب -> معدل الترميز -> الشفرة (16 حرف هيكسا)
+            pattern = r"(?i)" + re.escape(current_f) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r".*?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
             m = re.search(pattern, raw_data)
-            if m: return re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+            if m: 
+                return re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
     except: pass
     return None
 
 # ==========================================================
-# ميزة الخلفية الذكية مع التنبيه (The Watcher)
+# ميزة الخلفية الذكية (The Watcher)
 # ==========================================================
 class BissProWatcher:
     def __init__(self, session):
@@ -162,7 +156,7 @@ class BissProWatcher:
         self.running = False
 
 # ==========================================================
-# باقي الكلاسات والشاشات
+# باقي الكلاسات والشاشات (بدون أي حذف أو تعديل)
 # ==========================================================
 class AutoScale:
     def __init__(self):
@@ -389,7 +383,7 @@ class BissManagerList(Screen):
     def load_keys(self):
         path = get_softcam_path(); keys = []
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     if line.strip().upper().startswith("F "): keys.append(line.strip())
         self["keylist"].setList(keys)
@@ -402,8 +396,8 @@ class BissManagerList(Screen):
         if new_key is None: return
         path = get_softcam_path(); parts = self.old_line.split(); parts[3] = str(new_key).upper(); new_line = " ".join(parts)
         try:
-            with open(path, "r") as f: lines = f.readlines()
-            with open(path, "w") as f:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f: lines = f.readlines()
+            with open(path, "w", encoding="utf-8") as f:
                 for line in lines:
                     if line.strip() == self.old_line.strip(): f.write(new_line + "\n")
                     else: f.write(line)
@@ -416,8 +410,8 @@ class BissManagerList(Screen):
         if answer:
             current = self["keylist"].getCurrent(); path = get_softcam_path()
             try:
-                with open(path, "r") as f: lines = f.readlines()
-                with open(path, "w") as f:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f: lines = f.readlines()
+                with open(path, "w", encoding="utf-8") as f:
                     for line in lines:
                         if line.strip() != current.strip(): f.write(line)
                 self.load_keys(); restart_softcam_global()
