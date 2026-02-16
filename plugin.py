@@ -34,7 +34,7 @@ def get_softcam_path():
     paths = ["/etc/tuxbox/config/oscam/SoftCam.Key", "/etc/tuxbox/config/ncam/SoftCam.Key", "/etc/tuxbox/config/SoftCam.Key", "/usr/keys/SoftCam.Key"]
     for p in paths:
         if os.path.exists(p): return p
-    return "/etc/tuxbox/config/oscam/SoftCam.Key"
+    return "/etc/tuxbox/config/SoftCam.Key"
 
 def restart_softcam_global():
     os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
@@ -458,3 +458,4 @@ def main(session, **kwargs):
     session.open(BISSPro)
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+
