@@ -98,7 +98,7 @@ def find_key_online(service):
         
         raw_data = urlopen(DATA_SOURCE, timeout=10, context=ctx).read().decode("utf-8")
         
-        # البحث عن التردد بنطاق مرن (التردد الحالي، -1، -2، +1، +2)
+        # البحث المرن في التردد +/- 2 ميجاهرتز
         for f_offset in [0, 1, -1, 2, -2]:
             current_f = str(freq_val + f_offset)
             pattern = r"(?i)" + re.escape(current_f) + r".*?" + re.escape(pol) + r".*?" + re.escape(sr) + r"[\s\S]{0,100}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})"
@@ -126,9 +126,15 @@ class BissProWatcher:
     def auto_search(self):
         if self.running: return
         service = self.session.nav.getCurrentService()
-        if service and service.info().getInfo(iServiceInformation.sIsCrypted):
-            self.running = True
-            Thread(target=self.bg_thread, args=(service,)).start()
+        if service:
+            info = service.info()
+            # فحص إذا كانت القناة مشفرة (getInfo(sIsCrypted))
+            # وفحص إذا كان نظام التشفير يحتوي على نظام BISS (ID: 0x2600)
+            if info.getInfo(iServiceInformation.sIsCrypted):
+                caids = info.getInfoObject(iServiceInformation.sCAIDs)
+                if caids and 0x2600 in caids:
+                    self.running = True
+                    Thread(target=self.bg_thread, args=(service,)).start()
 
     def bg_thread(self, service):
         key = find_key_online(service)
@@ -141,7 +147,7 @@ class BissProWatcher:
         self.running = False
 
 # ==========================================================
-# الكلاسات الأساسية للشاشات
+# باقي الكلاسات والشاشات (بدون تغيير)
 # ==========================================================
 class AutoScale:
     def __init__(self):
@@ -349,9 +355,6 @@ class BISSPro(Screen):
         self["main_progress"].setValue(0); self["status"].setText("Ready")
         self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
 
-# ==========================================================
-# إدارة المفاتيح (Editor) وشاشة الإدخال
-# ==========================================================
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
