@@ -39,13 +39,30 @@ def get_softcam_path():
     return "/etc/tuxbox/config/oscam/SoftCam.Key"
 
 def restart_softcam_global():
-    os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
-    time.sleep(1.2)
-    scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam"]
+    # محاولة عمل ريستارت للكامة من خلال السكريبتات الرسمية (الطريقة الأنظف)
+    scripts = [
+        "/etc/init.d/softcam", 
+        "/etc/init.d/cardserver", 
+        "/etc/init.d/softcam.oscam", 
+        "/etc/init.d/softcam.ncam",
+        "/etc/init.d/softcam.oscam_emu"
+    ]
+    restarted = False
     for s in scripts:
         if os.path.exists(s):
-            os.system(f"'{s}' restart >/dev/null 2>&1")
+            os.system(f"{s} restart >/dev/null 2>&1")
+            restarted = True
             break
+    
+    # لو الطريقة الرسمية منفعتش بنلجأ للـ kill كحل أخير عشان نضمن القناة تفتح
+    if not restarted:
+        os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
+        time.sleep(1.0)
+        # محاولة التشغيل مرة تانية بعد القتل
+        for s in scripts:
+            if os.path.exists(s):
+                os.system(f"{s} start >/dev/null 2>&1")
+                break
 
 class AutoScale:
     def __init__(self):
@@ -286,8 +303,8 @@ class BissProServiceWatcher:
         self.is_scanning = False
 
     def on_event(self, event):
-        if event in (0, 1): # EV_START, EV_PLAYBACK_STARTED
-            self.check_timer.start(5000, True) 
+        if event in (0, 1): 
+            self.check_timer.start(6000, True) 
 
     def check_service(self):
         if self.is_scanning: return
