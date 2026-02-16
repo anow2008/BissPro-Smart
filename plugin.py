@@ -8,7 +8,7 @@ from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, eListboxPythonMultiContent
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random
 from urllib.request import urlopen
@@ -68,14 +68,19 @@ class BISSPro(Screen):
         self["time_label"] = Label(""); self["date_label"] = Label("")
         self["main_progress"] = ProgressBar()
         self["main_logo"] = Pixmap()
+        
         self.clock_timer = eTimer()
         try: self.clock_timer.callback.append(self.update_clock)
         except: self.clock_timer.timeout.connect(self.update_clock)
         self.clock_timer.start(1000)
+        
         self.timer = eTimer()
         try: self.timer.callback.append(self.show_result)
         except: self.timer.timeout.connect(self.show_result)
-        self["menu"] = MenuList([])
+
+        # إصلاح القائمة لضمان عدم حدوث كراش
+        self["menu"] = MenuList([], enableWrapAround=True, content=eListboxPythonMultiContent)
+        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         self["menu"].onSelectionChanged.append(self.update_dynamic_logo)
         self.onLayoutFinish.append(self.build_menu)
@@ -103,14 +108,17 @@ class BISSPro(Screen):
                 act, icon_path
             ])
             lst.append(res)
+        
         self["menu"].l.setList(lst)
-        self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
-        self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        # تحديد الخطوط بشكل آمن بعد التأكد من نوع القائمة
+        if hasattr(self["menu"].l, 'setFont'):
+            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
+            self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
         self.update_dynamic_logo()
 
     def update_dynamic_logo(self):
         curr = self["menu"].getCurrent()
-        if curr:
+        if curr and len(curr) > 1:
             icon_path = curr[1][-1]
             if os.path.exists(icon_path):
                 self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
