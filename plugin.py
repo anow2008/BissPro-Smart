@@ -133,7 +133,6 @@ class BissProWatcher:
             ch_name = info.getName()
             h = get_biss_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
             save_to_file(h, key, ch_name + " (Auto)")
-            # إظهار رسالة النجاح لمدة 3 ثوانٍ
             self.session.open(MessageBox, f"✅ BISS Key Applied: {ch_name}\nChannel should open now.", MessageBox.TYPE_INFO, timeout=3)
         self.running = False
 
@@ -186,17 +185,33 @@ class BISSPro(Screen):
         try: self.timer.callback.append(self.show_result)
         except: self.timer.timeout.connect(self.show_result)
 
+        self.progress_timer = eTimer()
+        try: self.progress_timer.callback.append(self.update_progress_ui)
+        except: self.progress_timer.timeout.connect(self.update_progress_ui)
+        
+        self.current_percent = 0
+        self.download_finished = False
+
         self["menu"] = MenuList([])
+        self["menu"].onSelectionChanged.append(self.selectionChanged) # ربط تغيير الخيار بتحديث الصورة
+
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
 
         self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.load_main_logo)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
-    def load_main_logo(self):
-        logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
-        if os.path.exists(logo_path): self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
+    def selectionChanged(self):
+        curr = self["menu"].getCurrent()
+        if curr:
+            icon_path = curr[1][-2] # جلب مسار الأيقونة المخزن في القائمة
+            if os.path.exists(icon_path):
+                self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
+
+    def update_progress_ui(self):
+        self["main_progress"].setValue(self.current_percent)
+        if self.download_finished:
+            self.progress_timer.stop()
 
     def check_for_updates(self): Thread(target=self.thread_check_version).start()
 
@@ -237,15 +252,22 @@ class BISSPro(Screen):
 
     def build_menu(self):
         icon_dir = os.path.join(PLUGIN_PATH, "icons/")
-        menu_items = [("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), ("Autoroll", "Search Online", "auto", icon_dir + "auto.png")]
+        menu_items = [
+            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
+            ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
+            ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), 
+            ("Autoroll", "Search Online", "auto", icon_dir + "auto.png")
+        ]
         lst = []
         for name, desc, act, icon_path in menu_items:
             pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
-            res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), act])
+            # تخزين icon_path في المركز قبل الأخير للمصفوفة لسهولة استدعائه في selectionChanged
+            res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), icon_path, act])
             lst.append(res)
         self["menu"].l.setList(lst)
         if hasattr(self["menu"].l, 'setFont'): 
             self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        self.selectionChanged() # تحديث الصورة لأول خيار عند الفتح
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -273,15 +295,35 @@ class BISSPro(Screen):
     def action_editor(self): self.session.open(BissManagerList)
 
     def action_update(self): 
-        self["status"].setText("Downloading Softcam..."); self["main_progress"].setValue(50); Thread(target=self.do_update).start()
+        self.current_percent = 0
+        self.download_finished = False
+        self["status"].setText("Downloading Softcam...")
+        self.progress_timer.start(100)
+        Thread(target=self.do_update).start()
 
     def do_update(self):
         try:
             import ssl; ctx = ssl._create_unverified_context()
-            data = urlopen(URL_SOFTCAM, context=ctx).read()
-            with open(get_softcam_path(), "wb") as f: f.write(data)
-            restart_softcam_global(); self.res = (True, "Softcam Updated Successfully")
-        except: self.res = (False, "Softcam Update Failed")
+            req = urlopen(URL_SOFTCAM, context=ctx)
+            total_size = int(req.headers.get('content-length', 0))
+            downloaded = 0
+            chunk_size = 16384
+            
+            with open(get_softcam_path(), "wb") as f:
+                while True:
+                    chunk = req.read(chunk_size)
+                    if not chunk: break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        self.current_percent = int(downloaded * 100 / total_size)
+            
+            restart_softcam_global()
+            self.res = (True, "Softcam Updated Successfully")
+        except:
+            self.res = (False, "Softcam Update Failed")
+        
+        self.download_finished = True
         self.timer.start(100, True)
 
     def action_auto(self):
