@@ -15,7 +15,7 @@ from urllib.request import urlopen
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والروابط (مرتبة)
+# الإعدادات والروابط
 # ==========================================================
 VERSION_NUM = "1.1"
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
@@ -116,7 +116,7 @@ class BissProWatcher:
         self.running = False
 
     def on_event(self, event):
-        if event in (0, 1): # عند تغيير القناة
+        if event in (0, 1):
             self.check_timer.start(5000, True)
 
     def auto_search(self):
@@ -193,7 +193,7 @@ class BISSPro(Screen):
         self.download_finished = False
 
         self["menu"] = MenuList([])
-        self["menu"].onSelectionChanged.append(self.selectionChanged) # ربط تغيير الخيار بتحديث الصورة
+        self["menu"].onSelectionChanged.append(self.selectionChanged)
 
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
 
@@ -204,7 +204,7 @@ class BISSPro(Screen):
     def selectionChanged(self):
         curr = self["menu"].getCurrent()
         if curr:
-            icon_path = curr[1][-2] # جلب مسار الأيقونة المخزن في القائمة
+            icon_path = curr[1][-2]
             if os.path.exists(icon_path):
                 self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
 
@@ -255,19 +255,18 @@ class BISSPro(Screen):
         menu_items = [
             ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored SoftCam keys", "editor", icon_dir + "editor.png"), 
-            ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "update.png"), 
+            ("Download Softcam", "Update SoftCam.Key from server", "upd", icon_dir + "Download Softcam.png"), # تم التعديل هنا
             ("Autoroll", "Search Online", "auto", icon_dir + "auto.png")
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
             pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
-            # تخزين icon_path في المركز قبل الأخير للمصفوفة لسهولة استدعائه في selectionChanged
             res = (name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), icon_path, act])
             lst.append(res)
         self["menu"].l.setList(lst)
         if hasattr(self["menu"].l, 'setFont'): 
             self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36))); self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
-        self.selectionChanged() # تحديث الصورة لأول خيار عند الفتح
+        self.selectionChanged()
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -476,7 +475,7 @@ class HexInputScreen(Screen):
     def save(self): self.close("".join(self.key_list))
 
 # ==========================================================
-# تشغيل البلجن والـ Watcher
+# تشغيل البلجن
 # ==========================================================
 _watcher = None
 def main(session, **kwargs):
