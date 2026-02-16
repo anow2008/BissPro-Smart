@@ -118,7 +118,7 @@ def find_key_online(service):
     return None
 
 # ==========================================================
-# ميزة الخلفية الذكية (The Watcher) - تم تحسين الاستقرار هنا
+# ميزة الخلفية الذكية (The Watcher)
 # ==========================================================
 class BissProWatcher:
     def __init__(self, session):
@@ -225,10 +225,16 @@ class BISSPro(Screen):
         self.onLayoutFinish.append(self.build_menu); self.onLayoutFinish.append(self.check_for_updates); self.update_clock()
 
     def selectionChanged(self):
-        curr = self["menu"].getCurrent()
-        if curr:
-            icon_path = curr[1][-2]
-            if os.path.exists(icon_path): self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
+        try:
+            curr = self["menu"].getCurrent()
+            if curr:
+                icon_path = curr[1][-2]
+                if os.path.exists(icon_path):
+                    # التعديل الجوهري هنا لمنع الكراش
+                    if "main_logo" in self and self["main_logo"].instance is not None:
+                        self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
+        except Exception as e:
+            print("[BissPro-Smart] Error in selectionChanged:", e)
 
     def update_progress_ui(self):
         self["main_progress"].setValue(self.current_percent)
@@ -458,4 +464,3 @@ def main(session, **kwargs):
     session.open(BISSPro)
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="BISS Manager 1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
-
