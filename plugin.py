@@ -20,8 +20,8 @@ from threading import Thread
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.2" 
 
-URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version.txt"
-URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes.txt"
+URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
+URL_NOTES   = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
@@ -497,3 +497,4 @@ def sessionstart(reason, session=None, **kwargs):
     if reason == 0 and session is not None: 
         if watcher_instance is None:
             watcher_instance = BissProServiceWatcher(session)
+
