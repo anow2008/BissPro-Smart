@@ -114,17 +114,25 @@ class BISSPro(Screen):
         except: self.timer.timeout.connect(self.show_result)
         
         self["menu"] = MenuList([])
+        # إضافة الحدث الخاص بتغيير الخيار لتحديث اللوجو
+        self["menu"].onSelectionChanged.append(self.update_big_logo)
+        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         
         self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.load_main_logo)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
-    def load_main_logo(self):
-        logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
-        if os.path.exists(logo_path):
-            self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
+    def update_big_logo(self):
+        curr = self["menu"].getCurrent()
+        if curr and len(curr[1]) > 4:
+            icon_path = curr[1][-1]
+            if os.path.exists(icon_path):
+                self["main_logo"].instance.setPixmap(LoadPixmap(path=icon_path))
+            else:
+                logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
+                if os.path.exists(logo_path):
+                    self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -182,18 +190,21 @@ class BISSPro(Screen):
                 MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), 
                 MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
                 MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), 
-                act
+                act,
+                icon_path # تخزين المسار لاستخدامه في التبديل
             ])
             lst.append(res)
         self["menu"].l.setList(lst)
         if hasattr(self["menu"].l, 'setFont'): 
             self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
             self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        # تشغيل التحديث لأول عنصر في القائمة
+        self.update_big_logo()
 
     def ok(self):
         curr = self["menu"].getCurrent()
         if curr:
-            act = curr[1][-1]
+            act = curr[1][-2] # تغير الإندكس لأننا أضفنا مسار الأيقونة في الأخير
             if act == "add": self.action_add()
             elif act == "editor": self.action_editor()
             elif act == "upd": self.action_update()
@@ -365,7 +376,6 @@ class BissProServiceWatcher:
             os.chmod(target, 0o644)
             restart_softcam_global()
             
-            # تم تعديل الوقت ليكون 3 ثوانٍ فقط (timeout=3)
             addNotification(MessageBox, f"BissPro Smart: [ {name} ] Opened ✅", type=MessageBox.TYPE_INFO, timeout=3)
             
             return True
