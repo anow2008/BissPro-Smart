@@ -39,7 +39,6 @@ def get_softcam_path():
     return "/etc/tuxbox/config/oscam/SoftCam.Key"
 
 def restart_softcam_global():
-    # محاولة عمل ريستارت للكامة من خلال السكريبتات الرسمية (الطريقة الأنظف)
     scripts = [
         "/etc/init.d/softcam", 
         "/etc/init.d/cardserver", 
@@ -54,11 +53,9 @@ def restart_softcam_global():
             restarted = True
             break
     
-    # لو الطريقة الرسمية منفعتش بنلجأ للـ kill كحل أخير عشان نضمن القناة تفتح
     if not restarted:
         os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
         time.sleep(1.0)
-        # محاولة التشغيل مرة تانية بعد القتل
         for s in scripts:
             if os.path.exists(s):
                 os.system(f"{s} start >/dev/null 2>&1")
@@ -311,9 +308,20 @@ class BissProServiceWatcher:
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
+        
+        # التعديل الجديد: التحقق من التشفير والتأكد من وجود نظام BISS (CAID 0x2600)
         if info.getInfo(iServiceInformation.sIsCrypted):
-            self.is_scanning = True
-            Thread(target=self.bg_do_auto, args=(service,)).start()
+            is_biss = False
+            caids = info.getInfoObject(iServiceInformation.sCAIDs)
+            if caids:
+                for caid in caids:
+                    if caid == 0x2600:
+                        is_biss = True
+                        break
+            
+            if is_biss:
+                self.is_scanning = True
+                Thread(target=self.bg_do_auto, args=(service,)).start()
 
     def bg_do_auto(self, service):
         try:
@@ -475,7 +483,6 @@ class HexInputScreen(Screen):
     def exit_clean(self): self.close(None)
     def save(self): self.close("".join(self.key_list))
 
-# متغير عالمي لتخزين المراقب لمنع تكراره
 watcher_instance = None
 
 def main(session, **kwargs):
