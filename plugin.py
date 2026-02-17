@@ -2,6 +2,7 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
+from Tools.Notifications import addNotification
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
@@ -309,7 +310,6 @@ class BissProServiceWatcher:
         if not service: return
         info = service.info()
         
-        # التعديل الجديد: التحقق من التشفير والتأكد من وجود نظام BISS (CAID 0x2600)
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
@@ -358,12 +358,19 @@ class BissProServiceWatcher:
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
+            
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
+            
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
             restart_softcam_global()
+            
+            # تم تعديل الوقت ليكون 3 ثوانٍ فقط (timeout=3)
+            addNotification(MessageBox, f"BissPro Smart: [ {name} ] Opened ✅", type=MessageBox.TYPE_INFO, timeout=3)
+            
             return True
-        except: return False
+        except: 
+            return False
 
 class BissManagerList(Screen):
     def __init__(self, session):
@@ -497,6 +504,3 @@ def sessionstart(reason, session=None, **kwargs):
     if reason == 0 and session is not None: 
         if watcher_instance is None:
             watcher_instance = BissProServiceWatcher(session)
-
-
-
