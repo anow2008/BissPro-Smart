@@ -2,7 +2,18 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
-from Tools.Notifications import addNotification
+# --- تعديل التوافق مع التنبيهات ---
+try:
+    from Tools.Notifications import addNotification
+except ImportError:
+    try:
+        from Screens.Notifications import Notifications
+        def addNotification(type, message, timeout=5, **kwargs):
+            Notifications.addNotification(type, message, timeout=timeout)
+    except:
+        def addNotification(*args, **kwargs):
+            pass
+# --------------------------------
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
@@ -538,4 +549,3 @@ def sessionstart(reason, session=None, **kwargs):
     if reason == 0 and session is not None: 
         if watcher_instance is None:
             watcher_instance = BissProServiceWatcher(session)
-
