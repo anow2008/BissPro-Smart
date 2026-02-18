@@ -176,7 +176,7 @@ class BISSPro(Screen):
         menu_items = [
             ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"), 
-            ("Download Softcam", "Full update from server", "upd", icon_dir + "update.png"), 
+            ("Download Softcam", "Full update from server", "upd", icon_dir + "Download Softcam.png"), 
             ("Autoroll", "Smart search for current channel", "auto", icon_dir + "auto.png")
         ]
         lst = []
@@ -538,3 +538,4 @@ def sessionstart(reason, session=None, **kwargs):
     if reason == 0 and session is not None: 
         if watcher_instance is None:
             watcher_instance = BissProServiceWatcher(session)
+
