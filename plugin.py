@@ -192,7 +192,6 @@ class BISSPro(Screen):
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
-            # تم تحسين تحميل الأيقونات لضمان ظهورها
             pixmap = None
             if os.path.exists(icon_path):
                 pixmap = LoadPixmap(path=icon_path)
@@ -207,7 +206,7 @@ class BISSPro(Screen):
             ])
             lst.append(res)
         self["menu"].l.setList(lst)
-        self["menu"].l.setItemHeight(self.ui.px(100)) # تأكيد الارتفاع يدوياً
+        self["menu"].l.setItemHeight(self.ui.px(100))
         if hasattr(self["menu"].l, 'setFont'): 
             self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
             self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
@@ -351,7 +350,11 @@ class BissProServiceWatcher:
         if not service: return
         info = service.info()
         
+        # الذكاء المضاف: إذا كانت القناة تعرض فيديو (يعني الشفرة الحالية شغالة) فلا تفعل شيئاً
         if info.getInfo(iServiceInformation.sIsCrypted):
+            if info.getInfo(iServiceInformation.sVideoHeight) > 0:
+                return # القناة مفتوحة بالفعل، اترك ملف الشفرات كما هو
+
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
@@ -381,7 +384,6 @@ class BissProServiceWatcher:
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
             found = False
-            # محاولة البحث التلقائي من جوجل
             try:
                 resp = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
