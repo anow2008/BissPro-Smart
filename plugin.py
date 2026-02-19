@@ -37,7 +37,6 @@ URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
 
-# رابط جوجل شيت الخاص بك
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
@@ -55,20 +54,13 @@ def get_softcam_path():
     return "/etc/tuxbox/config/oscam/SoftCam.Key"
 
 def restart_softcam_global():
-    scripts = [
-        "/etc/init.d/softcam", 
-        "/etc/init.d/cardserver", 
-        "/etc/init.d/softcam.oscam", 
-        "/etc/init.d/softcam.ncam",
-        "/etc/init.d/softcam.oscam_emu"
-    ]
+    scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
     restarted = False
     for s in scripts:
         if os.path.exists(s):
             os.system(f"{s} restart >/dev/null 2>&1")
             restarted = True
             break
-    
     if not restarted:
         os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
         time.sleep(1.0)
@@ -94,9 +86,7 @@ class BISSPro(Screen):
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
             <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
-            
             <widget name="main_logo" position="{self.ui.px(720)},{self.ui.px(120)}" size="{self.ui.px(300)},{self.ui.px(300)}" alphatest="blend" transparent="1" zPosition="1" />
-            
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
@@ -131,30 +121,26 @@ class BISSPro(Screen):
         except: self.timer.timeout.connect(self.show_result)
         
         self["menu"] = MenuList([])
-        # ربط حركة السهم بتغيير اللوجو
         self["menu"].onSelectionChanged.append(self.update_dynamic_logo)
-        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         
         self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.update_dynamic_logo) # لتحميل اللوجو الأول عند الفتح
+        self.onLayoutFinish.append(self.update_dynamic_logo)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
     def update_dynamic_logo(self):
+        # تم إضافة فحص أمان (Safety check) لمنع الكراش عند الخروج
+        if not self.instance or "main_logo" not in self or not self["main_logo"].instance:
+            return
+            
         curr = self["menu"].getCurrent()
         if curr:
             act = curr[1][-1]
-            icon_map = {
-                "add": "add.png",
-                "editor": "editor.png",
-                "upd": "Download Softcam.png",
-                "auto": "auto.png"
-            }
+            icon_map = {"add": "add.png", "editor": "editor.png", "upd": "Download Softcam.png", "auto": "auto.png"}
             icon_file = icon_map.get(act, "plugin.png")
             path = os.path.join(PLUGIN_PATH, "icons/", icon_file)
-            if not os.path.exists(path): 
-                path = os.path.join(PLUGIN_PATH, "plugin.png")
+            if not os.path.exists(path): path = os.path.join(PLUGIN_PATH, "plugin.png")
             if os.path.exists(path):
                 self["main_logo"].instance.setPixmap(LoadPixmap(path=path))
 
@@ -172,10 +158,6 @@ class BISSPro(Screen):
                 remote_v = float(remote_search.group(1))
                 local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
                 if remote_v > local_v:
-                    try:
-                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
-                        update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
-                    except: update_notes = "New features."
                     msg = "New Version v%s available!\n\nUpdate?" % str(remote_v)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
@@ -291,8 +273,7 @@ class BISSPro(Screen):
     def action_auto(self):
         service = self.session.nav.getCurrentService()
         if service: 
-            self["status"].setText("Searching Cloud & GitHub..."); 
-            self["main_progress"].setValue(40); 
+            self["status"].setText("Searching..."); self["main_progress"].setValue(40)
             Thread(target=self.do_auto, args=(service,)).start()
 
     def do_auto(self, service):
@@ -306,44 +287,30 @@ class BISSPro(Screen):
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-            
             found = False
-            # 1. البحث في جوجل شيت أولاً
             try:
                 response = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
-                reader = csv.reader(response)
-                for row in reader:
+                for row in csv.reader(response):
                     if len(row) >= 2 and curr_freq in row[0]:
                         clean_key = row[1].replace(" ", "").strip().upper()
                         if len(clean_key) == 16:
                             if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
-                                # تعديل الرسالة لتظهر Found والشفرة
-                                self.res = (True, f"Found: {clean_key}")
-                                found = True; break
+                                self.res = (True, f"Found: {clean_key}"); found = True; break
             except: pass
-
-            # 2. البحث في المصدر التقليدي GitHub إذا لم نجد في جوجل
             if not found:
                 raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
-                self["main_progress"].setValue(70)
                 pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(combined_id, clean_key, ch_name): 
-                            self.res = (True, f"Found: {clean_key}")
+                        if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {clean_key}")
                         else: self.res = (False, "Write Error")
                         found = True
-                    else: self.res = (False, "Invalid key length")
-            
             if not found: self.res = (False, "Not found for %s" % curr_freq)
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
-# ==========================================================
-# الخلفية: المراقب الذكي (Background Scanner) - التلقائي
-# ==========================================================
 class BissProServiceWatcher:
     def __init__(self, session):
         self.session = session
@@ -352,90 +319,65 @@ class BissProServiceWatcher:
         except: self.check_timer.timeout.connect(self.check_service)
         self.session.nav.event.append(self.on_event)
         self.is_scanning = False
-
     def on_event(self, event):
-        if event in (0, 1): 
-            self.check_timer.start(6000, True) 
-
+        if event in (0, 1): self.check_timer.start(6000, True)
     def check_service(self):
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
                 for caid in caids:
-                    if caid == 0x2600:
-                        is_biss = True
-                        break
-            
+                    if caid == 0x2600: is_biss = True; break
             if is_biss:
                 self.is_scanning = True
                 Thread(target=self.bg_do_auto, args=(service,)).start()
-
     def bg_do_auto(self, service):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info()
-            ch_name = info.getName()
+            info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            if not t_data: 
-                self.is_scanning = False
-                return
+            if not t_data: self.is_scanning = False; return
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-            
             found = False
-            # محاولة البحث التلقائي من جوجل
             try:
                 resp = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
                     if len(row) >= 2 and curr_freq in row[0]:
                         clean = row[1].replace(" ", "").strip().upper()
-                        if len(clean) == 16:
-                            self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name)
-                            found = True; break
+                        if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
             except: pass
-
             if not found:
                 raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
                 pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                    if len(clean_key) == 16:
-                        self.save_biss_key_background(combined_id, clean_key, ch_name)
+                    if len(clean_key) == 16: self.save_biss_key_background(combined_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
-
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
-            target_dir = os.path.dirname(target)
-            if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
-            
             with open(target, "w") as f: f.writelines(lines)
-            os.chmod(target, 0o644)
-            restart_softcam_global()
-            # تعديل تنبيه الخلفية ليظهر الكود فوراً
+            os.chmod(target, 0o644); restart_softcam_global()
             addNotification(MessageBox, f"Found: {key}", type=MessageBox.TYPE_INFO, timeout=3)
             return True
-        except: 
-            return False
+        except: return False
 
 class BissManagerList(Screen):
     def __init__(self, session):
@@ -501,7 +443,6 @@ class HexInputScreen(Screen):
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel text="OK: Confirm | Move &lt; &gt;: Position | Move ∧∨: Letters | Numbers: Input" position="{self.ui.px(10)},{self.ui.px(410)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
@@ -517,9 +458,9 @@ class HexInputScreen(Screen):
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
             "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
             "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
-            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
-            "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
-            "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
+            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"),
+            "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"),
+            "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
         }, -1)
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
         self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
@@ -556,16 +497,10 @@ class HexInputScreen(Screen):
     def save(self): self.close("".join(self.key_list))
 
 watcher_instance = None
-
-def main(session, **kwargs):
-    session.open(BISSPro)
-
+def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
-
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
-    if reason == 0 and session is not None: 
-        if watcher_instance is None:
-            watcher_instance = BissProServiceWatcher(session)
+    if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
