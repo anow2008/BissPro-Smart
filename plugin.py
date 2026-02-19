@@ -35,7 +35,7 @@ VERSION_NUM = "v1.0"
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
-DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
+DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss"
 
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
@@ -51,7 +51,7 @@ def get_softcam_path():
         if os.path.exists(p): return p
     for p in paths:
         if os.path.exists(os.path.dirname(p)): return p
-    return "/etc/tuxbox/config/oscam/SoftCam.Key"
+    return "/etc/tuxbox/config/SoftCam.Key"
 
 def restart_softcam_global():
     scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
@@ -504,3 +504,4 @@ def Plugins(**kwargs):
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
+
