@@ -130,8 +130,10 @@ class BISSPro(Screen):
         self.update_clock()
 
     def update_dynamic_logo(self):
+        # تم إضافة فحص أمان (Safety check) لمنع الكراش عند الخروج
         if not self.instance or "main_logo" not in self or not self["main_logo"].instance:
             return
+            
         curr = self["menu"].getCurrent()
         if curr:
             act = curr[1][-1]
@@ -317,34 +319,22 @@ class BissProServiceWatcher:
         except: self.check_timer.timeout.connect(self.check_service)
         self.session.nav.event.append(self.on_event)
         self.is_scanning = False
-
     def on_event(self, event):
-        if event in (0, 1):
-            self.check_timer.start(5000, True)
-
+        if event in (0, 1): self.check_timer.start(6000, True)
     def check_service(self):
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        
         if info.getInfo(iServiceInformation.sIsCrypted):
-            # فحص ذكي: إذا كانت القناة مشغلة حالياً (فك التشفير ناجح)، لا تشغل الأوتورول
-            if info.getInfo(iServiceInformation.sIsDecoding) == 1:
-                return
-
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
                 for caid in caids:
-                    if caid == 0x2600: 
-                        is_biss = True
-                        break
-            
+                    if caid == 0x2600: is_biss = True; break
             if is_biss:
                 self.is_scanning = True
                 Thread(target=self.bg_do_auto, args=(service,)).start()
-
     def bg_do_auto(self, service):
         try:
             import ssl
@@ -374,7 +364,6 @@ class BissProServiceWatcher:
                     if len(clean_key) == 16: self.save_biss_key_background(combined_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
-
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
