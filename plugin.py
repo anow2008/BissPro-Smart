@@ -30,7 +30,7 @@ from threading import Thread
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.0" 
+VERSION_NUM = "v1.1" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
@@ -283,6 +283,9 @@ class BISSPro(Screen):
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            curr_pol = "V" if t_data.get("polarization", 0) else "H"
+            curr_sr = str(t_data.get("symbol_rate", 0) // 1000)
+            
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
@@ -290,12 +293,16 @@ class BISSPro(Screen):
             try:
                 response = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(response):
-                    if len(row) >= 2 and curr_freq in row[0]:
-                        clean_key = row[1].replace(" ", "").strip().upper()
-                        if len(clean_key) == 16:
-                            if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
-                                self.res = (True, f"Found: {clean_key}"); found = True; break
+                    if len(row) >= 2:
+                        # البحث بالتردد الكامل والقطبية والترميز
+                        sheet_info = row[0].upper()
+                        if curr_freq in sheet_info and curr_pol in sheet_info and curr_sr in sheet_info:
+                            clean_key = row[1].replace(" ", "").strip().upper()
+                            if len(clean_key) == 16:
+                                if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
+                                    self.res = (True, f"Found: {clean_key}"); found = True; break
             except: pass
+            
             if not found:
                 raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
                 pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
@@ -306,7 +313,7 @@ class BISSPro(Screen):
                         if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {clean_key}")
                         else: self.res = (False, "Write Error")
                         found = True
-            if not found: self.res = (False, "Not found for %s" % curr_freq)
+            if not found: self.res = (False, "Not found for %s %s %s" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
@@ -343,6 +350,9 @@ class BissProServiceWatcher:
             if not t_data: self.is_scanning = False; return
             freq_raw = t_data.get("frequency", 0)
             curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            curr_pol = "V" if t_data.get("polarization", 0) else "H"
+            curr_sr = str(t_data.get("symbol_rate", 0) // 1000)
+            
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
@@ -350,9 +360,11 @@ class BissProServiceWatcher:
             try:
                 resp = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
-                    if len(row) >= 2 and curr_freq in row[0]:
-                        clean = row[1].replace(" ", "").strip().upper()
-                        if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
+                    if len(row) >= 2:
+                        sheet_info = row[0].upper()
+                        if curr_freq in sheet_info and curr_pol in sheet_info and curr_sr in sheet_info:
+                            clean = row[1].replace(" ", "").strip().upper()
+                            if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
             except: pass
             if not found:
                 raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
@@ -475,8 +487,9 @@ class HexInputScreen(Screen):
             freq = t_data.get("frequency", 0)
             if freq > 50000: freq = freq / 1000
             pol = "H" if t_data.get("polarization", 0) == 0 else "V"
+            sr = t_data.get("symbol_rate", 0) // 1000
             sid = info.getInfo(iServiceInformation.sSID); vpid = info.getInfo(iServiceInformation.sVideoPID)
-            self["channel_data"].setText(f"FREQ: {int(freq)} {pol} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
+            self["channel_data"].setText(f"{int(freq)} {pol} {sr} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
     def update_display(self):
         display_parts = []
         for i in range(16):
@@ -501,7 +514,7 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
