@@ -441,7 +441,7 @@ class HexInputScreen(Screen):
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             
-            <eLabel text="OK: confirm  |  &lt; &gt; : move position  |  ▲ ▼ : letters" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(28)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <eLabel text="OK: confirm  |  ◀ ▶ : move position  |  ▲ ▼ : letters" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(28)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
