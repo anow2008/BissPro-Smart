@@ -94,7 +94,9 @@ class BISSPro(Screen):
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
             <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
+            
             <widget name="main_logo" position="{self.ui.px(720)},{self.ui.px(120)}" size="{self.ui.px(300)},{self.ui.px(300)}" alphatest="blend" transparent="1" zPosition="1" />
+            
             <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
             <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
             <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
@@ -129,17 +131,32 @@ class BISSPro(Screen):
         except: self.timer.timeout.connect(self.show_result)
         
         self["menu"] = MenuList([])
+        # ربط حركة السهم بتغيير اللوجو
+        self["menu"].onSelectionChanged.append(self.update_dynamic_logo)
+        
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         
         self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.load_main_logo)
+        self.onLayoutFinish.append(self.update_dynamic_logo) # لتحميل اللوجو الأول عند الفتح
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
-    def load_main_logo(self):
-        logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
-        if os.path.exists(logo_path):
-            self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
+    def update_dynamic_logo(self):
+        curr = self["menu"].getCurrent()
+        if curr:
+            act = curr[1][-1]
+            icon_map = {
+                "add": "add.png",
+                "editor": "editor.png",
+                "upd": "Download Softcam.png",
+                "auto": "auto.png"
+            }
+            icon_file = icon_map.get(act, "plugin.png")
+            path = os.path.join(PLUGIN_PATH, "icons/", icon_file)
+            if not os.path.exists(path): 
+                path = os.path.join(PLUGIN_PATH, "plugin.png")
+            if os.path.exists(path):
+                self["main_logo"].instance.setPixmap(LoadPixmap(path=path))
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -300,7 +317,8 @@ class BISSPro(Screen):
                         clean_key = row[1].replace(" ", "").strip().upper()
                         if len(clean_key) == 16:
                             if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
-                                self.res = (True, f"Found in Cloud: {clean_key}")
+                                # تعديل الرسالة لتظهر Found والشفرة
+                                self.res = (True, f"Found: {clean_key}")
                                 found = True; break
             except: pass
 
@@ -313,7 +331,8 @@ class BISSPro(Screen):
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found in GitHub: {clean_key}")
+                        if self.save_biss_key(combined_id, clean_key, ch_name): 
+                            self.res = (True, f"Found: {clean_key}")
                         else: self.res = (False, "Write Error")
                         found = True
                     else: self.res = (False, "Invalid key length")
@@ -412,7 +431,8 @@ class BissProServiceWatcher:
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
             restart_softcam_global()
-            addNotification(MessageBox, f"BissPro Smart: [ {name} ] Opened ✅", type=MessageBox.TYPE_INFO, timeout=3)
+            # تعديل تنبيه الخلفية ليظهر الكود فوراً
+            addNotification(MessageBox, f"Found: {key}", type=MessageBox.TYPE_INFO, timeout=3)
             return True
         except: 
             return False
