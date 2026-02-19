@@ -281,31 +281,41 @@ class BISSPro(Screen):
             ctx = ssl._create_unverified_context()
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            
+            # بيانات القناة الحالية من التيونر
             freq_raw = t_data.get("frequency", 0)
-            curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
-            curr_sr = str(t_data.get("symbol_rate", 0) // 1000)
+            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            
             found = False
             try:
                 response = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(response):
                     if len(row) >= 2:
-                        # البحث بالتردد الكامل والقطبية والترميز
                         sheet_info = row[0].upper()
-                        if curr_freq in sheet_info and curr_pol in sheet_info and curr_sr in sheet_info:
-                            clean_key = row[1].replace(" ", "").strip().upper()
-                            if len(clean_key) == 16:
-                                if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
-                                    self.res = (True, f"Found: {clean_key}"); found = True; break
+                        # استخراج الأرقام من خانة جوجل (التردد والترميز)
+                        nums = re.findall(r'\d+', sheet_info)
+                        if len(nums) >= 2:
+                            sheet_freq = int(nums[0])
+                            sheet_sr = int(nums[1])
+                            
+                            # مقارنة ذكية للتردد والقطبية والترميز
+                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                clean_key = row[1].replace(" ", "").strip().upper()
+                                if len(clean_key) == 16:
+                                    if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
+                                        self.res = (True, f"Found: {clean_key}"); found = True; break
             except: pass
             
             if not found:
+                # محاولة البحث في GitHub كمصدر ثاني (نصي)
                 raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
-                pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
@@ -313,7 +323,7 @@ class BISSPro(Screen):
                         if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {clean_key}")
                         else: self.res = (False, "Write Error")
                         found = True
-            if not found: self.res = (False, "Not found for %s %s %s" % (curr_freq, curr_pol, curr_sr))
+            if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
@@ -348,27 +358,35 @@ class BissProServiceWatcher:
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: self.is_scanning = False; return
+            
+            # بيانات القناة الحالية
             freq_raw = t_data.get("frequency", 0)
-            curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
-            curr_sr = str(t_data.get("symbol_rate", 0) // 1000)
+            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            
             found = False
             try:
                 resp = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
                     if len(row) >= 2:
                         sheet_info = row[0].upper()
-                        if curr_freq in sheet_info and curr_pol in sheet_info and curr_sr in sheet_info:
-                            clean = row[1].replace(" ", "").strip().upper()
-                            if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
+                        nums = re.findall(r'\d+', sheet_info)
+                        if len(nums) >= 2:
+                            sheet_freq = int(nums[0])
+                            sheet_sr = int(nums[1])
+                            # مقارنة ذكية في الخلفية
+                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                clean = row[1].replace(" ", "").strip().upper()
+                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
             except: pass
             if not found:
                 raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
-                pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
