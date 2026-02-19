@@ -319,8 +319,8 @@ class BissProServiceWatcher:
         self.is_scanning = False
 
     def on_event(self, event):
-        if event in (0, 1): # عند تغيير القناة أو بدء اللعب
-            self.check_timer.start(6000, True) # انتظر 6 ثواني للتأكد من حالة التشفير
+        if event in (0, 1):
+            self.check_timer.start(5000, True)
 
     def check_service(self):
         if self.is_scanning: return
@@ -328,23 +328,18 @@ class BissProServiceWatcher:
         if not service: return
         info = service.info()
         
-        # 1. التحقق أولاً: هل القناة مشفرة أصلاً؟
         if info.getInfo(iServiceInformation.sIsCrypted):
-            
-            # 2. التحقق الذكي: هل القناة تعمل حالياً (فك التشفير ناجح)؟
-            # إذا كانت القناة مفتوحة، القيمة sVideoHeight أو sVideoWidth ستكون أكبر من 0
-            # أو يمكن استخدام sCAIDs للتأكد أنها BISS
-            is_decoding = info.getInfo(iServiceInformation.sVideoHeight) > 0
-            
-            if is_decoding:
-                # القناة تعمل بالفعل، لا نفعل شيئاً (تجاهل الـ AutoRoll)
+            # فحص ذكي: إذا كانت القناة مشغلة حالياً (فك التشفير ناجح)، لا تشغل الأوتورول
+            if info.getInfo(iServiceInformation.sIsDecoding) == 1:
                 return
 
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
                 for caid in caids:
-                    if caid == 0x2600: is_biss = True; break
+                    if caid == 0x2600: 
+                        is_biss = True
+                        break
             
             if is_biss:
                 self.is_scanning = True
