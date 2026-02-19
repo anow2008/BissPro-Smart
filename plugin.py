@@ -192,7 +192,13 @@ class BISSPro(Screen):
         ]
         lst = []
         for name, desc, act, icon_path in menu_items:
-            pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
+            # تم تحسين تحميل الأيقونات لضمان ظهورها
+            pixmap = None
+            if os.path.exists(icon_path):
+                pixmap = LoadPixmap(path=icon_path)
+            else:
+                print(f"[BissPro] Missing icon: {icon_path}")
+            
             res = (name, [
                 MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), 
                 MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
@@ -201,6 +207,7 @@ class BISSPro(Screen):
             ])
             lst.append(res)
         self["menu"].l.setList(lst)
+        self["menu"].l.setItemHeight(self.ui.px(100)) # تأكيد الارتفاع يدوياً
         if hasattr(self["menu"].l, 'setFont'): 
             self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
             self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
