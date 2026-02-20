@@ -25,19 +25,20 @@ import urllib.request
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات (نفس كودك الأصلي)
+# الإعدادات والمسارات (نفس روابطك الأصلية تماماً)
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.2-Fixed" 
+VERSION_NUM = "v1.2" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss"
+
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
-# --- الدالة الجديدة للحساب (التعديل الوحيد المطلوب) ---
+# --- دالة الحساب المحدثة ---
 def calculate_oscam_hash(sid, vpid):
     try:
         if vpid == -1 or vpid is None: vpid = 0
@@ -53,7 +54,6 @@ def get_softcam_path():
         if os.path.exists(p): return p
     return "/etc/tuxbox/config/SoftCam.Key"
 
-# --- دالة الريستارت كما هي في كودك الأصلي بالظبط ---
 def restart_softcam_global():
     scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
     restarted = False
@@ -66,9 +66,7 @@ def restart_softcam_global():
         os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
         time.sleep(1.0)
         for s in scripts:
-            if os.path.exists(s):
-                os.system(f"{s} start >/dev/null 2>&1")
-                break
+            if os.path.exists(s): os.system(f"{s} start >/dev/null 2>&1")
 
 class AutoScale:
     def __init__(self):
@@ -82,7 +80,6 @@ class BISSPro(Screen):
         self.ui = AutoScale()
         Screen.__init__(self, session)
         self.res = (False, "")
-        # سكين الواجهة الأصلي
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
@@ -130,14 +127,7 @@ class BISSPro(Screen):
         self["time_label"].setText(time.strftime("%H:%M:%S"))
         self["date_label"].setText(time.strftime("%A, %d %B %Y"))
 
-    def update_dynamic_logo(self):
-        curr = self["menu"].getCurrent()
-        if curr:
-            icon_map = {"add": "add.png", "editor": "editor.png", "upd": "Download Softcam.png", "auto": "auto.png"}
-            icon_file = icon_map.get(curr[1][-1], "plugin.png")
-            path = os.path.join(PLUGIN_PATH, "icons/", icon_file)
-            if os.path.exists(path): self["main_logo"].instance.setPixmap(LoadPixmap(path=path))
-
+    # --- رجعتلك نظام فحص التحديثات زي الكود الأصلي ---
     def check_for_updates(self): Thread(target=self.thread_check_version).start()
     
     def thread_check_version(self):
@@ -149,14 +139,12 @@ class BISSPro(Screen):
             remote_v = float(re.search(r"(\d+\.\d+)", remote_data).group(1))
             local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
             if remote_v > local_v:
-                msg = "Update Found: v%s\nInstall Update?" % str(remote_v)
-                self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
+                self.session.openWithCallback(self.install_update, MessageBox, "Update Found: v%s\nInstall Update?" % str(remote_v), MessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
         if answer:
-            self["status"].setText("Downloading...")
-            Thread(target=self.do_plugin_download).start()
+            self["status"].setText("Downloading..."); Thread(target=self.do_plugin_download).start()
 
     def do_plugin_download(self):
         try:
@@ -184,6 +172,13 @@ class BISSPro(Screen):
             pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
             lst.append((name, [MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name), MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, color=0xbbbbbb), act]))
         self["menu"].l.setList(lst)
+
+    def update_dynamic_logo(self):
+        curr = self["menu"].getCurrent()
+        if curr:
+            icon_file = {"add": "add.png", "editor": "editor.png", "upd": "Download Softcam.png", "auto": "auto.png"}.get(curr[1][-1], "plugin.png")
+            path = os.path.join(PLUGIN_PATH, "icons/", icon_file)
+            if os.path.exists(path): self["main_logo"].instance.setPixmap(LoadPixmap(path=path))
 
     def ok(self):
         curr = self["menu"].getCurrent()
@@ -218,8 +213,7 @@ class BISSPro(Screen):
                         if f"F {h.upper()}" not in line.upper(): lines.append(line)
             lines.append(f"F {h.upper()} 00000000 {key.upper()} ;{name}\n")
             with open(target, "w") as f: f.writelines(lines)
-            os.chmod(target, 0o644)
-            restart_softcam_global(); return True
+            os.chmod(target, 0o644); restart_softcam_global(); return True
         except: return False
 
     def action_update(self): Thread(target=self.do_update).start()
@@ -227,8 +221,8 @@ class BISSPro(Screen):
         try:
             data = urllib.request.urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key").read()
             with open(get_softcam_path(), "wb") as f: f.write(data)
-            restart_softcam_global(); self.res = (True, "Updated")
-        except: self.res = (False, "Failed")
+            restart_softcam_global(); self.res = (True, "Softcam Updated")
+        except: self.res = (False, "Update Failed")
         self.timer.start(100, True)
 
     def action_auto(self):
@@ -246,8 +240,8 @@ class BISSPro(Screen):
                 if len(row) >= 2 and str(f) in row[0]:
                     k = row[1].replace(" ", "").strip().upper()
                     if len(k) == 16: self.save_biss_key(h, k, info.getName()); self.res = (True, f"Found: {k}"); found = True; break
-            if not found: self.res = (False, "Not found")
-        except: self.res = (False, "Error")
+            if not found: self.res = (False, "Not in Server")
+        except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
     def action_editor(self): self.session.open(BissManagerList)
@@ -296,7 +290,7 @@ class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
-        self.skin = f"""<screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="Editor"><widget name="keylist" position="20,20" size="960,650" itemHeight="50" /></screen>"""
+        self.skin = f"""<screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="Key Editor"><widget name="keylist" position="20,20" size="960,650" itemHeight="50" /></screen>"""
         self["keylist"] = MenuList([]); self["actions"] = ActionMap(["OkCancelActions"], {"cancel": self.close}, -1)
         self.onLayoutFinish.append(self.load)
     def load(self):
@@ -311,7 +305,7 @@ class HexInputScreen(Screen):
     def __init__(self, session, channel_name=""):
         self.ui = AutoScale()
         Screen.__init__(self, session)
-        self.skin = f"""<screen position="center,center" size="1150,400" title="Input"><widget name="keylabel" position="25,100" size="1100,110" font="Regular;80" halign="center" /></screen>"""
+        self.skin = f"""<screen position="center,center" size="1150,400" title="Manual Input"><widget name="keylabel" position="25,100" size="1100,110" font="Regular;80" halign="center" /></screen>"""
         self["keylabel"] = Label(""); self["actions"] = ActionMap(["OkCancelActions", "NumberActions"], {"cancel": lambda: self.close(None), "0": lambda: self.k("0"), "1": lambda: self.k("1"), "2": lambda: self.k("2"), "3": lambda: self.k("3"), "4": lambda: self.k("4"), "5": lambda: self.k("5"), "6": lambda: self.k("6"), "7": lambda: self.k("7"), "8": lambda: self.k("8"), "9": lambda: self.k("9")}, -1)
         self.key = ["0"] * 16; self.idx = 0; self.update()
     def k(self, n):
