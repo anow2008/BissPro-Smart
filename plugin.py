@@ -22,7 +22,7 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random, csv, binascii, struct
+import os, re, shutil, time, random, csv, binascii, struct # تم إضافة binascii و struct
 import urllib.request
 from threading import Thread
 
@@ -30,7 +30,7 @@ from threading import Thread
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.2" 
+VERSION_NUM = "v1.2-HashFix" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
@@ -40,12 +40,11 @@ DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss"
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
-# --- الدالة الجديدة لحساب الهاش المتوافق مع الأوسكام الحديث ---
+# --- الدالة المضافة لحساب الهاش الصحيح 17E679EF ---
 def calculate_oscam_hash(sid, vpid):
     try:
         if vpid == -1 or vpid is None: vpid = 0
-        # معالجة البيانات بنظام Big Endian كما يطلب الإيمو
-        data = struct.pack(">HH", int(sid) & 0xFFFF, int(vpid) & 0xFFFF)
+        data = struct.pack("<HH", int(sid) & 0xFFFF, int(vpid) & 0xFFFF)
         crc = binascii.crc32(data) & 0xFFFFFFFF
         return "%08X" % crc
     except:
@@ -224,8 +223,7 @@ class BISSPro(Screen):
             self.session.open(MessageBox, self.res[1], MessageBox.TYPE_ERROR, timeout=5)
 
     def answer_restart(self, answer):
-        if answer:
-            quitMainloop(3)
+        if answer: quitMainloop(3)
 
     def update_clock(self):
         self["time_label"].setText(time.strftime("%H:%M:%S"))
@@ -274,9 +272,9 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # --- تعديل الهاش هنا ---
-        hash_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
-        if self.save_biss_key(hash_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
+        # --- تعديل لاستخدام الهاش الصحيح ---
+        combined_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
+        if self.save_biss_key(combined_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
 
@@ -310,8 +308,7 @@ class BISSPro(Screen):
             data = urllib.request.urlopen(req, context=ctx).read()
             target_path = get_softcam_path()
             with open(target_path, "wb") as f: f.write(data)
-            os.chmod(target_path, 0o644)
-            restart_softcam_global()
+            os.chmod(target_path, 0o644); restart_softcam_global()
             self.res = (True, "Softcam Updated Successfully")
         except: self.res = (False, "Softcam Update Failed")
         self.timer.start(100, True)
@@ -333,8 +330,8 @@ class BISSPro(Screen):
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
-            # --- تعديل الهاش في الـ Auto ---
-            hash_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
+            # --- تعديل لاستخدام الهاش الصحيح ---
+            combined_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -346,12 +343,11 @@ class BISSPro(Screen):
                         sheet_info = row[0].upper()
                         nums = re.findall(r'\d+', sheet_info)
                         if len(nums) >= 2:
-                            sheet_freq = int(nums[0])
-                            sheet_sr = int(nums[1])
+                            sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    if self.save_biss_key(hash_id, clean_key, row[2] if len(row) > 2 else ch_name):
+                                    if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
                                         self.res = (True, f"Found: {clean_key}"); found = True; break
             except: pass
             
@@ -363,7 +359,7 @@ class BISSPro(Screen):
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(hash_id, clean_key, ch_name): self.res = (True, f"Found: {clean_key}")
+                        if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {clean_key}")
                         else: self.res = (False, "Write Error")
                         found = True
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
@@ -372,12 +368,10 @@ class BISSPro(Screen):
 
 class BissProServiceWatcher:
     def __init__(self, session):
-        self.session = session
-        self.check_timer = eTimer()
+        self.session = session; self.check_timer = eTimer()
         try: self.check_timer.callback.append(self.check_service)
         except: self.check_timer.timeout.connect(self.check_service)
-        self.session.nav.event.append(self.on_event)
-        self.is_scanning = False
+        self.session.nav.event.append(self.on_event); self.is_scanning = False
     def on_event(self, event):
         if event in (0, 1): self.check_timer.start(6000, True)
     def check_service(self):
@@ -392,8 +386,7 @@ class BissProServiceWatcher:
                 for caid in caids:
                     if caid == 0x2600: is_biss = True; break
             if is_biss:
-                self.is_scanning = True
-                Thread(target=self.bg_do_auto, args=(service,)).start()
+                self.is_scanning = True; Thread(target=self.bg_do_auto, args=(service,)).start()
     def bg_do_auto(self, service):
         try:
             import ssl
@@ -406,8 +399,8 @@ class BissProServiceWatcher:
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
-            # --- تعديل الهاش في الـ Background ---
-            hash_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
+            # --- تعديل لاستخدام الهاش الصحيح ---
+            combined_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -416,14 +409,12 @@ class BissProServiceWatcher:
                 resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
                     if len(row) >= 2:
-                        sheet_info = row[0].upper()
-                        nums = re.findall(r'\d+', sheet_info)
+                        sheet_info = row[0].upper(); nums = re.findall(r'\d+', sheet_info)
                         if len(nums) >= 2:
-                            sheet_freq = int(nums[0])
-                            sheet_sr = int(nums[1])
+                            sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean = row[1].replace(" ", "").strip().upper()
-                                if len(clean) == 16: self.save_biss_key_background(hash_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
+                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
             except: pass
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
@@ -432,28 +423,26 @@ class BissProServiceWatcher:
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                    if len(clean_key) == 16: self.save_biss_key_background(hash_id, clean_key, ch_name)
+                    if len(clean_key) == 16: self.save_biss_key_background(combined_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
-    def save_biss_key_background(self, hash_id, key, name):
+    def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {hash_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {hash_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
+                        if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
-            addNotification(MessageBox, f"Found: {key}", type=MessageBox.TYPE_INFO, timeout=3)
-            return True
+            addNotification(MessageBox, f"Found: {key}", type=MessageBox.TYPE_INFO, timeout=3); return True
         except: return False
 
 class BissManagerList(Screen):
     def __init__(self, session):
-        self.ui = AutoScale()
-        Screen.__init__(self, session)
+        self.ui = AutoScale(); Screen.__init__(self, session)
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro - Key Editor">
             <widget name="keylist" position="{self.ui.px(20)},{self.ui.px(20)}" size="{self.ui.px(960)},{self.ui.px(520)}" itemHeight="{self.ui.px(50)}" scrollbarMode="showOnDemand" />
@@ -463,8 +452,7 @@ class BissManagerList(Screen):
             <eLabel position="{self.ui.px(30)},{self.ui.px(635)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#ff0000" />
             <eLabel text="RED: Delete" position="{self.ui.px(75)},{self.ui.px(630)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
         </screen>"""
-        self["keylist"] = MenuList([])
-        self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
+        self["keylist"] = MenuList([]); self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
         self.onLayoutFinish.append(self.load_keys)
     def load_keys(self):
         path = get_softcam_path(); keys = []
@@ -505,8 +493,7 @@ class BissManagerList(Screen):
 
 class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
-        self.ui = AutoScale()
-        Screen.__init__(self, session)
+        self.ui = AutoScale(); Screen.__init__(self, session)
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
@@ -536,16 +523,14 @@ class HexInputScreen(Screen):
         }, -1)
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
         self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
-        self.onLayoutFinish.append(self.get_active_channel_data)
-        self.update_display()
+        self.onLayoutFinish.append(self.get_active_channel_data); self.update_display()
     def get_active_channel_data(self):
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq = t_data.get("frequency", 0)
             if freq > 50000: freq = freq / 1000
-            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
-            sr = t_data.get("symbol_rate", 0) // 1000
+            pol = "H" if t_data.get("polarization", 0) == 0 else "V"; sr = t_data.get("symbol_rate", 0) // 1000
             sid = info.getInfo(iServiceInformation.sSID); vpid = info.getInfo(iServiceInformation.sVideoPID)
             self["channel_data"].setText(f"{int(freq)} {pol} {sr} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
     def update_display(self):
@@ -553,8 +538,7 @@ class HexInputScreen(Screen):
         for i in range(16):
             char = self.key_list[i]; display_parts.append("[%s]" % char if i == self.index else char)
             if (i + 1) % 4 == 0 and i < 15: display_parts.append("-")
-        self["keylabel"].setText("".join(display_parts))
-        self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
+        self["keylabel"].setText("".join(display_parts)); self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
         char_col = ""
         for i, c in enumerate(self.chars): char_col += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
         self["char_list"].setText(char_col)
@@ -572,7 +556,7 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2 HashFix", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
