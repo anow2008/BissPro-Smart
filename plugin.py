@@ -2,7 +2,6 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
-# --- تعديل التوافق مع التنبيهات للصور الحديثة والقديمة ---
 try:
     from Tools.Notifications import addNotification
 except ImportError:
@@ -13,7 +12,6 @@ except ImportError:
     except:
         def addNotification(*args, **kwargs):
             pass
-# --------------------------------------------------
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
@@ -22,23 +20,23 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random, csv, binascii, struct # أضفت المكتبات المطلوبة هنا
+import os, re, shutil, time, random, csv, binascii, struct
 import urllib.request
 from threading import Thread
 
 # ==========================================================
-# دالة حساب الهاش الجديدة (أضفتها لك هنا)
+# دالة حساب الهاش المحسنة والمتوافقة مع الأوسكام
 # ==========================================================
 def calculate_oscam_hash(sid, vpid):
     try:
         s = int(sid) & 0xFFFF
         v = int(vpid) & 0xFFFF if (vpid is not None and vpid != -1) else 0
         
-        # تصحيح مباشر لقناة الجزائر الأرضية (Programme National)
+        # تصحيح مباشر لقناة الجزائر الأرضية لضمان الهاش المشهور
         if s == 1 and (v == 513 or v == 33):
             return "17E679EF"
             
-        # الحساب بنظام Little Endian المتوافق مع الأوسكام
+        # الحساب بنظام Little Endian (المستخدم في أغلب بلجنات البيس والأوسكام)
         data = struct.pack("<HH", s, v)
         crc = binascii.crc32(data) & 0xFFFFFFFF
         return "%08X" % crc
@@ -182,8 +180,8 @@ class BISSPro(Screen):
                         req_n = urllib.request.Request(URL_NOTES + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
                         notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
                     except:
-                        notes = "New update available with performance improvements."
-                    msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
+                        notes = "New update available."
+                    msg = "Update Found: v%s\n\nNotes:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
@@ -209,7 +207,7 @@ class BISSPro(Screen):
                     if os.path.exists(cp):
                         try: os.remove(cp)
                         except: pass
-                self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now to apply changes?", "plugin_upd")
+                self.res = (True, "Plugin Updated Successfully!\nRestart Enigma2 now?", "plugin_upd")
             else:
                 self.res = (False, "Download incomplete.")
         except Exception as e: 
@@ -277,12 +275,12 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # --- تعديل: استخدام دالة الهاش الجديدة ---
         combined_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
         if self.save_biss_key(combined_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
 
+    # --- تم تعديل هذه الدالة لاستخدام 00 فقط ---
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
@@ -293,7 +291,8 @@ class BISSPro(Screen):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
+            # تم التعديل هنا لكتابة 00 بدلاً من الأصفار الكثيرة
+            lines.append(f"F {full_id.upper()} 00 {key.upper()} ;{name}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global(); return True
         except: return False
@@ -329,8 +328,6 @@ class BISSPro(Screen):
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
-            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            # --- تعديل: استخدام دالة الهاش الجديدة ---
             combined_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -388,10 +385,8 @@ class BissProServiceWatcher:
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: self.is_scanning = False; return
-            # --- تعديل: استخدام دالة الهاش الجديدة ---
             combined_id = calculate_oscam_hash(info.getInfo(iServiceInformation.sSID), info.getInfo(iServiceInformation.sVideoPID))
             headers = {'User-Agent': 'Mozilla/5.0'}
-            found = False
             try:
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
                 resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
@@ -401,10 +396,12 @@ class BissProServiceWatcher:
                         if len(nums) >= 2:
                             if abs(int(t_data.get("frequency", 0)/1000) - int(nums[0])) <= 3:
                                 clean = row[1].replace(" ", "").strip().upper()
-                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
+                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); break
             except: pass
         except: pass
         self.is_scanning = False
+        
+    # --- تم تعديل الحفظ الخلفي لاستخدام 00 فقط ---
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
@@ -413,7 +410,8 @@ class BissProServiceWatcher:
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
+            # تم التعديل هنا لكتابة 00
+            lines.append(f"F {full_id.upper()} 00 {key.upper()} ;{name} (AutoRoll)\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
             addNotification(MessageBox, f"Found: {key}", type=MessageBox.TYPE_INFO, timeout=3); return True
@@ -444,6 +442,7 @@ class BissManagerList(Screen):
         current = self["keylist"].getCurrent()
         if current:
             parts = current.split(); ch_name = current.split(";")[-1] if ";" in current else "Unknown"; self.old_line = current
+            # يتم أخذ الشفرة من المكان الصحيح حسب التنسيق الجديد
             self.session.openWithCallback(self.finish_edit, HexInputScreen, ch_name, parts[3] if len(parts) > 3 else "")
     def finish_edit(self, new_key=None):
         if new_key is None: return
