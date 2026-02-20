@@ -20,7 +20,7 @@ from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random, csv
 import urllib.request
@@ -150,9 +150,7 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            # إضافة الهيدر لتجنب حظر GitHub
             headers = {'User-Agent': 'Mozilla/5.0'}
-            
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
             req = urllib.request.Request(v_url, headers=headers)
             remote_data = urllib.request.urlopen(req, timeout=10, context=ctx).read().decode("utf-8")
@@ -162,20 +160,19 @@ class BISSPro(Screen):
                 remote_v = float(remote_search.group(1))
                 local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
                 if remote_v > local_v:
-                    # جلب الملاحظات قبل عرض الرسالة
                     try:
-                        req_n = urllib.request.Request(URL_NOTES, headers=headers)
+                        req_n = urllib.request.Request(URL_NOTES + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
                         notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
                     except:
-                        notes = "New update available with bug fixes."
+                        notes = "New update available with performance improvements."
                     
-                    msg = "New Version v%s available!\n\nNotes:\n%s\n\nUpdate?" % (str(remote_v), notes)
+                    msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
         if answer:
-            self["status"].setText("Updating...")
+            self["status"].setText("Downloading...")
             Thread(target=self.do_plugin_download).start()
 
     def do_plugin_download(self):
@@ -183,25 +180,47 @@ class BISSPro(Screen):
             import ssl
             ctx = ssl._create_unverified_context()
             headers = {'User-Agent': 'Mozilla/5.0'}
-            req = urllib.request.Request(URL_PLUGIN, headers=headers)
-            new_code = urllib.request.urlopen(req, timeout=20, context=ctx).read()
+            req = urllib.request.Request(URL_PLUGIN + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
+            new_code = urllib.request.urlopen(req, timeout=30, context=ctx).read()
             
-            if len(new_code) > 1000:
-                file_path = os.path.join(PLUGIN_PATH, "plugin.py")
-                with open(file_path, "wb") as f: 
+            if len(new_code) > 2000:
+                target_file = os.path.join(PLUGIN_PATH, "plugin.py")
+                
+                try:
+                    os.chmod(PLUGIN_PATH, 0o755)
+                    if os.path.exists(target_file):
+                        os.chmod(target_file, 0o644)
+                except: pass
+
+                with open(target_file, "wb") as f:
                     f.write(new_code)
                 
-                # إزالة ملفات الكاش لضمان التحديث
                 for ext in [".pyo", ".pyc"]:
-                    cp = file_path.replace(".py", ext)
-                    if os.path.exists(cp): os.remove(cp)
+                    cp = target_file.replace(".py", ext)
+                    if os.path.exists(cp):
+                        try: os.remove(cp)
+                        except: pass
                     
-                self.res = (True, "Updated Successfully! Restart Enigma2.")
+                self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now to apply changes?")
             else:
-                self.res = (False, "Downloaded file is corrupted or too small.")
+                self.res = (False, "Download incomplete. Please try again.")
         except Exception as e: 
-            self.res = (False, "Update Failed: " + str(e))
+            self.res = (False, "Error: " + str(e))
         self.timer.start(100, True)
+
+    def show_result(self): 
+        self["main_progress"].setValue(0)
+        self["status"].setText("Ready")
+        # تعديل هنا: إذا كان التحديث ناجحاً، اسأل عن الرستارت
+        if self.res[0] and "Restart Enigma2" in self.res[1]:
+            self.session.openWithCallback(self.answer_restart, MessageBox, self.res[1], MessageBox.TYPE_YESNO)
+        else:
+            self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
+
+    def answer_restart(self, answer):
+        if answer:
+            # تنفيذ الرستارت فوراً
+            quitMainloop(3)
 
     def update_clock(self):
         self["time_label"].setText(time.strftime("%H:%M:%S"))
@@ -271,11 +290,6 @@ class BISSPro(Screen):
             restart_softcam_global(); return True
         except: return False
 
-    def show_result(self): 
-        self["main_progress"].setValue(0)
-        self["status"].setText("Ready")
-        self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
-
     def action_update(self): 
         self["status"].setText("Downloading Softcam..."); 
         self["main_progress"].setValue(50); 
@@ -312,7 +326,6 @@ class BISSPro(Screen):
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             
-            # بيانات القناة الحالية من التيونر
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
@@ -330,13 +343,10 @@ class BISSPro(Screen):
                 for row in csv.reader(response):
                     if len(row) >= 2:
                         sheet_info = row[0].upper()
-                        # استخراج الأرقام من خانة جوجل (التردد والترميز)
                         nums = re.findall(r'\d+', sheet_info)
                         if len(nums) >= 2:
                             sheet_freq = int(nums[0])
                             sheet_sr = int(nums[1])
-                            
-                            # مقارنة ذكية للتردد والقطبية والترميز
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
@@ -345,7 +355,6 @@ class BISSPro(Screen):
             except: pass
             
             if not found:
-                # محاولة البحث في GitHub كمصدر ثاني (نصي)
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
                 raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
                 pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
@@ -392,7 +401,6 @@ class BissProServiceWatcher:
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: self.is_scanning = False; return
             
-            # بيانات القناة الحالية
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
@@ -414,7 +422,6 @@ class BissProServiceWatcher:
                         if len(nums) >= 2:
                             sheet_freq = int(nums[0])
                             sheet_sr = int(nums[1])
-                            # مقارنة ذكية في الخلفية
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean = row[1].replace(" ", "").strip().upper()
                                 if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
@@ -573,4 +580,3 @@ def Plugins(**kwargs):
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
-
