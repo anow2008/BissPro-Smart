@@ -23,7 +23,7 @@ from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixm
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random, csv
-from urllib.request import urlopen
+import urllib.request
 from threading import Thread
 
 # ==========================================================
@@ -150,14 +150,26 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
+            # إضافة الهيدر لتجنب حظر GitHub
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
-            remote_data = urlopen(v_url, timeout=10, context=ctx).read().decode("utf-8")
+            req = urllib.request.Request(v_url, headers=headers)
+            remote_data = urllib.request.urlopen(req, timeout=10, context=ctx).read().decode("utf-8")
+            
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
                 local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
                 if remote_v > local_v:
-                    msg = "New Version v%s available!\n\nUpdate?" % str(remote_v)
+                    # جلب الملاحظات قبل عرض الرسالة
+                    try:
+                        req_n = urllib.request.Request(URL_NOTES, headers=headers)
+                        notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
+                    except:
+                        notes = "New update available with bug fixes."
+                    
+                    msg = "New Version v%s available!\n\nNotes:\n%s\n\nUpdate?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
@@ -170,10 +182,25 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            new_code = urlopen(URL_PLUGIN, timeout=15, context=ctx).read()
-            with open(os.path.join(PLUGIN_PATH, "plugin.py"), "wb") as f: f.write(new_code)
-            self.res = (True, "Updated Successfully! Restart Enigma2.")
-        except Exception as e: self.res = (False, "Failed: " + str(e))
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            req = urllib.request.Request(URL_PLUGIN, headers=headers)
+            new_code = urllib.request.urlopen(req, timeout=20, context=ctx).read()
+            
+            if len(new_code) > 1000:
+                file_path = os.path.join(PLUGIN_PATH, "plugin.py")
+                with open(file_path, "wb") as f: 
+                    f.write(new_code)
+                
+                # إزالة ملفات الكاش لضمان التحديث
+                for ext in [".pyo", ".pyc"]:
+                    cp = file_path.replace(".py", ext)
+                    if os.path.exists(cp): os.remove(cp)
+                    
+                self.res = (True, "Updated Successfully! Restart Enigma2.")
+            else:
+                self.res = (False, "Downloaded file is corrupted or too small.")
+        except Exception as e: 
+            self.res = (False, "Update Failed: " + str(e))
         self.timer.start(100, True)
 
     def update_clock(self):
@@ -258,7 +285,10 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", context=ctx).read()
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            req = urllib.request.Request("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", headers=headers)
+            data = urllib.request.urlopen(req, context=ctx).read()
+            
             target_path = get_softcam_path()
             target_dir = os.path.dirname(target_path)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
@@ -292,9 +322,11 @@ class BISSPro(Screen):
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
+            headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
             try:
-                response = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
+                req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
+                response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(response):
                     if len(row) >= 2:
                         sheet_info = row[0].upper()
@@ -314,7 +346,8 @@ class BISSPro(Screen):
             
             if not found:
                 # محاولة البحث في GitHub كمصدر ثاني (نصي)
-                raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
+                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
+                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
                 pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern, raw_data, re.I)
                 if m:
@@ -369,9 +402,11 @@ class BissProServiceWatcher:
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
+            headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
             try:
-                resp = urlopen(GOOGLE_SHEET_URL, timeout=8, context=ctx).read().decode("utf-8").splitlines()
+                req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
+                resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
                     if len(row) >= 2:
                         sheet_info = row[0].upper()
@@ -385,7 +420,8 @@ class BissProServiceWatcher:
                                 if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
             except: pass
             if not found:
-                raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
+                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
+                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
                 pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
                 m = re.search(pattern, raw_data, re.I)
                 if m:
@@ -537,3 +573,4 @@ def Plugins(**kwargs):
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
+
