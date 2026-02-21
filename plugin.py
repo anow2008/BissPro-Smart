@@ -27,6 +27,23 @@ import urllib.request
 from threading import Thread
 
 # ==========================================================
+# دالة CRC32 MPEG-2 المضافة لتعطي الهاش الصحيح (مثل 9DE5E789)
+# ==========================================================
+def get_biss_crc32(sid, freq):
+    data = "%04X%d" % (sid & 0xFFFF, freq)
+    data_bytes = data.encode('utf-8')
+    crc = 0xFFFFFFFF
+    for byte in data_bytes:
+        crc ^= (byte << 24)
+        for _ in range(8):
+            if crc & 0x80000000:
+                crc = (crc << 1) ^ 0x04C11DB7
+            else:
+                crc <<= 1
+        crc &= 0xFFFFFFFF
+    return "%08X" % crc
+
+# ==========================================================
 # الإعدادات والمسارات - نسخة v1.0 المعدلة
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
@@ -159,7 +176,6 @@ class BISSPro(Screen):
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
-                # تحديد الإصدار الحالي للمقارنة
                 local_v = 1.0 
                 if remote_v > local_v:
                     try:
@@ -264,15 +280,19 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        combined_id = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
-        if self.save_biss_key(combined_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
+        t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+        freq = int(t_data.get("frequency", 0) / 1000 if t_data.get("frequency", 0) > 50000 else t_data.get("frequency", 0))
+        # استخدام دالة CRC32 MPEG-2 الجديدة هنا
+        crc_id = get_biss_crc32(info.getInfo(iServiceInformation.sSID), freq)
+        
+        if self.save_biss_key(crc_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()} [{crc_id}]")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
 
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
-            current_date = time.strftime("%d-%m-%Y") # جلب التاريخ الحالي
+            current_date = time.strftime("%d-%m-%Y") 
             target_dir = os.path.dirname(target)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
@@ -280,7 +300,6 @@ class BISSPro(Screen):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            # تم التعديل هنا: حفظ اسم القناة الفعلي من الجهاز + التاريخ
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
@@ -317,7 +336,7 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName() # اسم القناة من الجهاز
+            info = service.info(); ch_name = info.getName() 
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             
             freq_raw = t_data.get("frequency", 0)
@@ -325,9 +344,8 @@ class BISSPro(Screen):
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
-            raw_sid = info.getInfo(iServiceInformation.sSID)
-            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            # حساب الهاش CRC32 MPEG-2 الجديد
+            crc_id = get_biss_crc32(info.getInfo(iServiceInformation.sSID), curr_freq)
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -344,9 +362,8 @@ class BISSPro(Screen):
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    # تعديل هنا: تجاهل اسم الجدول واستخدام اسم الجهاز ch_name
-                                    if self.save_biss_key(combined_id, clean_key, ch_name):
-                                        self.res = (True, f"Found: {ch_name}"); found = True; break
+                                    if self.save_biss_key(crc_id, clean_key, ch_name):
+                                        self.res = (True, f"Found: {ch_name} [{crc_id}]"); found = True; break
             except: pass
             
             if not found:
@@ -357,7 +374,7 @@ class BISSPro(Screen):
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {ch_name}")
+                        if self.save_biss_key(crc_id, clean_key, ch_name): self.res = (True, f"Found: {ch_name} [{crc_id}]")
                         else: self.res = (False, "Write Error")
                         found = True
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
@@ -398,8 +415,10 @@ class BissProServiceWatcher:
             freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            raw_sid = info.getInfo(iServiceInformation.sSID); raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            
+            # الهاش CRC32 MPEG-2 الجديد في الخلفية
+            crc_id = get_biss_crc32(info.getInfo(iServiceInformation.sSID), curr_freq)
+            
             headers = {'User-Agent': 'Mozilla/5.0'}; found = False
             try:
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
@@ -410,7 +429,7 @@ class BissProServiceWatcher:
                         if len(nums) >= 2:
                             if abs(curr_freq - int(nums[0])) <= 3 and curr_pol in sheet_info:
                                 clean = row[1].replace(" ", "").strip().upper()
-                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, ch_name); found = True; break
+                                if len(clean) == 16: self.save_biss_key_background(crc_id, clean, ch_name); found = True; break
             except: pass
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
@@ -419,7 +438,7 @@ class BissProServiceWatcher:
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                    if len(clean_key) == 16: self.save_biss_key_background(combined_id, clean_key, ch_name)
+                    if len(clean_key) == 16: self.save_biss_key_background(crc_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
     def save_biss_key_background(self, full_id, key, name):
@@ -433,7 +452,7 @@ class BissProServiceWatcher:
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Auto) | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
-            addNotification(MessageBox, f"Found: {key}\n{name}", type=MessageBox.TYPE_INFO, timeout=3)
+            addNotification(MessageBox, f"Found: {key}\n{name} [{full_id}]", type=MessageBox.TYPE_INFO, timeout=3)
             return True
         except: return False
 
