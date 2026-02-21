@@ -28,7 +28,8 @@ from threading import Thread
 from array import array
 
 # ==========================================================
-# دالة الهاش الاحترافية المتوافقة تماماً مع Oscam/Ncam (CRC32 0x2600)
+# دالة الهاش الاحترافية المتوافقة تماماً مع صورة E2 BISS Key Editor
+# تعطي نتيجة 17E679FE لقناة الجزائر الأرضية
 # ==========================================================
 crc_table = array("L")
 for byte in range(256):
@@ -43,22 +44,28 @@ for byte in range(256):
 
 def get_oscam_hash(namespace, tsid, onid, sid):
     try:
+        # تحويل القيم لضمان التعامل معها كأرقام صحيحة Hex
         n = int(str(namespace), 16) if isinstance(namespace, str) else int(namespace)
         t = int(str(tsid), 16) if isinstance(tsid, str) else int(tsid)
         o = int(str(onid), 16) if isinstance(onid, str) else int(onid)
         s = int(str(sid), 16) if isinstance(sid, str) else int(sid)
-        data = struct.pack('>IHHH', n & 0xFFFF0000, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
+
+        # التعديل للمطابقة الكاملة مع الـ Hash Logic: CRC32 ORIGINAL
+        # نرسل الـ Namespace كاملاً كما يظهر في الصورة (0DCA2DA0)
+        data = struct.pack('>IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
+        
         value = 0x2600 ^ 0xffffffff
         for ch in data:
             byte_val = ch if isinstance(ch, int) else ord(ch)
             value = crc_table[(byte_val ^ value) & 0xff] ^ (value >> 8)
+        
         final_hash = value ^ 0xffffffff
         return "%08X" % (final_hash & 0xFFFFFFFF)
     except:
         return "00000000"
 
 # ==========================================================
-# الإعدادات والمسارات - نسخة v1.0 المعدلة
+# الإعدادات والمسارات - BissPro Smart v1.0
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.0" 
@@ -164,7 +171,6 @@ class BISSPro(Screen):
     def update_dynamic_logo(self):
         if not self.instance or "main_logo" not in self or not self["main_logo"].instance:
             return
-            
         curr = self["menu"].getCurrent()
         if curr:
             act = curr[1][-1]
@@ -186,7 +192,6 @@ class BISSPro(Screen):
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
             req = urllib.request.Request(v_url, headers=headers)
             remote_data = urllib.request.urlopen(req, timeout=10, context=ctx).read().decode("utf-8")
-            
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
@@ -197,7 +202,6 @@ class BISSPro(Screen):
                         notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
                     except:
                         notes = "New update available with performance improvements."
-                    
                     msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
@@ -214,7 +218,6 @@ class BISSPro(Screen):
             headers = {'User-Agent': 'Mozilla/5.0'}
             req = urllib.request.Request(URL_PLUGIN + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
             new_code = urllib.request.urlopen(req, timeout=30, context=ctx).read()
-            
             if len(new_code) > 2000:
                 target_file = os.path.join(PLUGIN_PATH, "plugin.py")
                 os.system("chmod 755 %s" % PLUGIN_PATH)
@@ -295,7 +298,7 @@ class BISSPro(Screen):
         if not service: return
         info = service.info()
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-        # --- تعديل الهاش ليتوافق مع أوسكام ---
+        # --- الحساب الجديد ليتوافق مع الصورة 17E679FE ---
         full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
         if self.save_biss_key(full_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
         else: self.res = (False, "File Error")
@@ -350,15 +353,12 @@ class BISSPro(Screen):
             ctx = ssl._create_unverified_context()
             info = service.info(); ch_name = info.getName() 
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            
-            # --- تعديل الهاش ليتوافق مع أوسكام ---
+            # --- الحساب الجديد ليتوافق مع الصورة 17E679FE ---
             full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
-            
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
             try:
@@ -377,7 +377,6 @@ class BISSPro(Screen):
                                     if self.save_biss_key(full_id, clean_key, ch_name):
                                         self.res = (True, f"Found: {ch_name}"); found = True; break
             except: pass
-            
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
                 raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
@@ -427,7 +426,7 @@ class BissProServiceWatcher:
             freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            # --- تعديل الهاش ليتوافق مع أوسكام ---
+            # --- الحساب الجديد ليتوافق مع الصورة 17E679FE ---
             full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             headers = {'User-Agent': 'Mozilla/5.0'}; found = False
             try:
