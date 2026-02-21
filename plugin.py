@@ -29,7 +29,7 @@ import binascii
 import struct
 
 # ==========================================================
-# دالة الهاش المضافة - مطابقة 100% لصورتك (تنتج 17E679FE)
+# دالة الهاش الجديدة (CRC32) - متوافقة مع Oscam/Ncam
 # ==========================================================
 def get_oscam_hash(namespace, tsid, onid, sid):
     try:
@@ -172,6 +172,7 @@ class BISSPro(Screen):
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
             req = urllib.request.Request(v_url, headers=headers)
             remote_data = urllib.request.urlopen(req, timeout=10, context=ctx).read().decode("utf-8")
+            
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
@@ -182,6 +183,7 @@ class BISSPro(Screen):
                         notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
                     except:
                         notes = "New update available with performance improvements."
+                    
                     msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
@@ -198,6 +200,7 @@ class BISSPro(Screen):
             headers = {'User-Agent': 'Mozilla/5.0'}
             req = urllib.request.Request(URL_PLUGIN + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
             new_code = urllib.request.urlopen(req, timeout=30, context=ctx).read()
+            
             if len(new_code) > 2000:
                 target_file = os.path.join(PLUGIN_PATH, "plugin.py")
                 os.system("chmod 755 %s" % PLUGIN_PATH)
@@ -277,10 +280,10 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # --- تعديل الهاش هنا ---
+        # --- استبدال الهاش بالجديد ---
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-        h = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
-        if self.save_biss_key(h, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
+        full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
+        if self.save_biss_key(full_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
 
@@ -333,11 +336,13 @@ class BISSPro(Screen):
             ctx = ssl._create_unverified_context()
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
+            freq_raw = t_data.get("frequency", 0)
+            curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            # الهاش المحدث
-            h = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
+            # --- الهاش الجديد ---
+            full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
+            
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
             try:
@@ -345,14 +350,29 @@ class BISSPro(Screen):
                 response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(response):
                     if len(row) >= 2:
-                        sheet_info = row[0].upper(); nums = re.findall(r'\d+', sheet_info)
+                        sheet_info = row[0].upper()
+                        nums = re.findall(r'\d+', sheet_info)
                         if len(nums) >= 2:
-                            if abs(curr_freq - int(nums[0])) <= 3 and curr_pol in sheet_info:
+                            sheet_freq = int(nums[0])
+                            sheet_sr = int(nums[1])
+                            if abs(curr_freq - sheet_freq) <= 5 and curr_pol in sheet_info:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    if self.save_biss_key(h, clean_key, ch_name):
+                                    if self.save_biss_key(full_id, clean_key, ch_name):
                                         self.res = (True, f"Found: {ch_name}"); found = True; break
             except: pass
+            
+            if not found:
+                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
+                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
+                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                m = re.search(pattern, raw_data, re.I)
+                if m:
+                    clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+                    if len(clean_key) == 16:
+                        if self.save_biss_key(full_id, clean_key, ch_name): self.res = (True, f"Found: {ch_name}")
+                        else: self.res = (False, "Write Error")
+                        found = True
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
@@ -388,7 +408,8 @@ class BissProServiceWatcher:
             if not t_data: self.is_scanning = False; return
             freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
-            h = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
+            # --- الهاش الجديد ---
+            full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             headers = {'User-Agent': 'Mozilla/5.0'}; found = False
             try:
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
@@ -396,10 +417,18 @@ class BissProServiceWatcher:
                 for row in csv.reader(resp):
                     if len(row) >= 2:
                         sheet_info = row[0].upper(); nums = re.findall(r'\d+', sheet_info)
-                        if len(nums) >= 2 and abs(curr_freq - int(nums[0])) <= 3 and curr_pol in sheet_info:
+                        if len(nums) >= 2 and abs(curr_freq - int(nums[0])) <= 5 and curr_pol in sheet_info:
                             clean = row[1].replace(" ", "").strip().upper()
-                            if len(clean) == 16: self.save_biss_key_background(h, clean, ch_name); found = True; break
+                            if len(clean) == 16: self.save_biss_key_background(full_id, clean, ch_name); found = True; break
             except: pass
+            if not found:
+                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
+                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
+                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                m = re.search(pattern, raw_data, re.I)
+                if m:
+                    clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+                    if len(clean_key) == 16: self.save_biss_key_background(full_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
     def save_biss_key_background(self, full_id, key, name):
@@ -414,7 +443,8 @@ class BissProServiceWatcher:
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
             addNotification(MessageBox, f"Found: {key}\n{name}", type=MessageBox.TYPE_INFO, timeout=3)
-        except: pass
+            return True
+        except: return False
 
 class BissManagerList(Screen):
     def __init__(self, session):
