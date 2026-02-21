@@ -29,7 +29,7 @@ import binascii
 import struct
 
 # ==========================================================
-# الإعدادات والمسارات - نسخة v1.1 المعدلة بنظام الهاش الذكي
+# الإعدادات والمسارات - نسخة v1.1 المعدلة بنظام الهاش العالمي 17E679FE
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1" 
@@ -42,15 +42,16 @@ DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss"
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
-def get_oscam_hash(tsid, onid, sid):
-    """توليد الهاش المطابق للأوسكام تماماً"""
+def get_oscam_hash(namespace, tsid, onid, sid):
+    """توليد الهاش المطابق للأوسكام (Hash Mode 0) مثل 17E679FE"""
     try:
-        # تحويل القيم من Hex string إلى Integer
+        n = int(str(namespace), 16) if isinstance(namespace, str) else namespace
         t = int(str(tsid), 16) if isinstance(tsid, str) else tsid
         o = int(str(onid), 16) if isinstance(onid, str) else onid
         s = int(str(sid), 16) if isinstance(sid, str) else sid
-        # دمج البيانات بنظام 2 بايت لكل منها بالترتيب TSID, ONID, SID
-        binary_data = struct.pack('>HHH', t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
+        
+        # الترتيب العالمي للأوسكام لإنتاج هاش 8 رموز: Namespace(4) + TSID(2) + ONID(2) + SID(2)
+        binary_data = struct.pack('>IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
         crc = binascii.crc32(binary_data) & 0xffffffff
         return "%08X" % crc
     except:
@@ -175,7 +176,6 @@ class BISSPro(Screen):
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
-                # تحديد الإصدار الحالي للمقارنة
                 local_v = 1.0 
                 if remote_v > local_v:
                     try:
@@ -281,13 +281,17 @@ class BISSPro(Screen):
         if not service: return
         info = service.info()
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+        
+        # استخراج البيانات اللازمة للهاش
+        namespace = t_data.get("namespace", 0)
         tsid = t_data.get("transport_stream_id", 0)
         onid = t_data.get("original_network_id", 0)
         sid = info.getInfo(iServiceInformation.sSID)
         
-        # استخدام الهاش الجديد بدلاً من الطريقة القديمة
-        final_hash = get_oscam_hash(tsid, onid, sid)
-        if not final_hash: # Fallback لو فشل الهاش
+        # توليد الهاش العالمي (17E679FE)
+        final_hash = get_oscam_hash(namespace, tsid, onid, sid)
+        
+        if not final_hash: # Fallback في حالة الخطأ
              final_hash = ("%04X" % (sid & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
         
         if self.save_biss_key(final_hash, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
@@ -297,7 +301,7 @@ class BISSPro(Screen):
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
-            current_date = time.strftime("%d-%m-%Y") # جلب التاريخ الحالي
+            current_date = time.strftime("%d-%m-%Y")
             target_dir = os.path.dirname(target)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
@@ -342,7 +346,7 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName() # اسم القناة من الجهاز
+            info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             
             freq_raw = t_data.get("frequency", 0)
@@ -350,12 +354,13 @@ class BISSPro(Screen):
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
+            raw_ns = t_data.get("namespace", 0)
             raw_tsid = t_data.get("transport_stream_id", 0)
             raw_onid = t_data.get("original_network_id", 0)
             raw_sid = info.getInfo(iServiceInformation.sSID)
             
-            # توليد الهاش الذكي للأوسكام
-            final_hash = get_oscam_hash(raw_tsid, raw_onid, raw_sid)
+            # توليد الهاش الذكي 17E679FE
+            final_hash = get_oscam_hash(raw_ns, raw_tsid, raw_onid, raw_sid)
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -426,10 +431,12 @@ class BissProServiceWatcher:
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
+            # استخراج البيانات في الخفاء للهاش الجديد
+            raw_ns = t_data.get("namespace", 0)
             raw_tsid = t_data.get("transport_stream_id", 0)
             raw_onid = t_data.get("original_network_id", 0)
             raw_sid = info.getInfo(iServiceInformation.sSID)
-            final_hash = get_oscam_hash(raw_tsid, raw_onid, raw_sid)
+            final_hash = get_oscam_hash(raw_ns, raw_tsid, raw_onid, raw_sid)
             
             headers = {'User-Agent': 'Mozilla/5.0'}; found = False
             try:
