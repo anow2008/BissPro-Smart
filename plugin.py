@@ -29,7 +29,7 @@ import binascii
 import struct
 
 # ==========================================================
-# الإعدادات والمسارات - نسخة v1.1 المعدلة بنظام الهاش العالمي 17E679FE
+# الإعدادات والمسارات - نسخة v1.1 المعدلة بنظام الهاش الذكي
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1" 
@@ -43,21 +43,18 @@ SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
 def get_oscam_hash(namespace, tsid, onid, sid):
-    """توليد الهاش المطابق للأوسكام (Hash Mode 0) مثل 17E679FE"""
+    """توليد الهاش المطابق للأوسكام Hash Mode 0 لضمان ظهور 17E679FE وأمثاله"""
     try:
-        n = int(str(namespace), 16) if isinstance(namespace, str) else namespace
-        t = int(str(tsid), 16) if isinstance(tsid, str) else tsid
-        o = int(str(onid), 16) if isinstance(onid, str) else onid
-        s = int(str(sid), 16) if isinstance(sid, str) else sid
-        
-        # التعديل الجوهري هنا لضمان توافق الهاش مع الاوسكام
+        n = int(str(namespace), 16) if isinstance(namespace, str) else int(namespace)
+        t = int(str(tsid), 16) if isinstance(tsid, str) else int(tsid)
+        o = int(str(onid), 16) if isinstance(onid, str) else int(onid)
+        s = int(str(sid), 16) if isinstance(sid, str) else int(sid)
         n &= 0xFFFF0000 
-        
-        binary_data = struct.pack('>IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
-        crc = binascii.crc32(binary_data) & 0xffffffff
+        data = struct.pack('>IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
+        crc = binascii.crc32(data) & 0xffffffff
         return "%08X" % crc
     except:
-        return None
+        return "00000000"
 
 def get_softcam_path():
     paths = [
@@ -178,13 +175,13 @@ class BISSPro(Screen):
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
-                local_v = 1.1
+                local_v = 1.0 
                 if remote_v > local_v:
                     try:
                         req_n = urllib.request.Request(URL_NOTES + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
                         notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
                     except:
-                        notes = "New update available."
+                        notes = "New update available with performance improvements."
                     
                     msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
@@ -205,6 +202,7 @@ class BISSPro(Screen):
             
             if len(new_code) > 2000:
                 target_file = os.path.join(PLUGIN_PATH, "plugin.py")
+                os.system("chmod 755 %s" % PLUGIN_PATH)
                 with open(target_file, "wb") as f:
                     f.write(new_code)
                 for ext in [".pyo", ".pyc"]:
@@ -212,9 +210,9 @@ class BISSPro(Screen):
                     if os.path.exists(cp):
                         try: os.remove(cp)
                         except: pass
-                self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now?", "plugin_upd")
+                self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now to apply changes?", "plugin_upd")
             else:
-                self.res = (False, "Download incomplete.")
+                self.res = (False, "Download incomplete. Please try again.")
         except Exception as e: 
             self.res = (False, "Error: " + str(e))
         self.timer.start(100, True)
@@ -282,17 +280,18 @@ class BISSPro(Screen):
         if not service: return
         info = service.info()
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-        
         final_hash = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
         
-        if self.save_biss_key(final_hash, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
+        if self.save_biss_key(final_hash, key, info.getName()): self.res = (True, f"Saved: {info.getName()} | {final_hash}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
 
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
-            current_date = time.strftime("%d-%m-%Y")
+            current_date = time.strftime("%d-%m-%Y") 
+            target_dir = os.path.dirname(target)
+            if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
@@ -334,13 +333,12 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName()
+            info = service.info(); ch_name = info.getName() 
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
-            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
             final_hash = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             
@@ -353,13 +351,11 @@ class BISSPro(Screen):
                     if len(row) >= 2:
                         sheet_info = row[0].upper()
                         nums = re.findall(r'\d+', sheet_info)
-                        if len(nums) >= 2:
-                            sheet_freq = int(nums[0])
-                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info:
-                                clean_key = row[1].replace(" ", "").strip().upper()
-                                if len(clean_key) == 16:
-                                    if self.save_biss_key(final_hash, clean_key, ch_name):
-                                        self.res = (True, f"Found: {ch_name}"); found = True; break
+                        if len(nums) >= 1 and abs(curr_freq - int(nums[0])) <= 3 and curr_pol in sheet_info:
+                            clean_key = row[1].replace(" ", "").strip().upper()
+                            if len(clean_key) == 16:
+                                if self.save_biss_key(final_hash, clean_key, ch_name):
+                                    self.res = (True, f"Found: {ch_name} ({final_hash})"); found = True; break
             except: pass
             
             if not found:
@@ -415,7 +411,7 @@ class BissProServiceWatcher:
                 for row in csv.reader(resp):
                     if len(row) >= 2:
                         nums = re.findall(r'\d+', row[0])
-                        if len(nums) >= 2 and abs(curr_freq - int(nums[0])) <= 3 and curr_pol in row[0].upper():
+                        if len(nums) >= 1 and abs(curr_freq - int(nums[0])) <= 3 and curr_pol in row[0].upper():
                             clean = row[1].replace(" ", "").strip().upper()
                             if len(clean) == 16: self.save_biss_key_background(final_hash, clean, ch_name); found = True; break
             except: pass
@@ -506,15 +502,23 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
+            <eLabel text="OK: confirm  |  ◀ ▶ : move position  |  ▲ ▼ : letters" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(28)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
-            <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
-            <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
+            <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
+            <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(330)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
+            <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
+            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
+            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
-        self["channel"] = Label(channel_name); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
-        self["l_red"] = Label("Exit"); self["l_green"] = Label("Save")
+        self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
+        self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Reset All")
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
-            "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save,
+            "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
             "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
             "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"),
             "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"),
@@ -522,17 +526,31 @@ class HexInputScreen(Screen):
         }, -1)
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
         self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
+        self.onLayoutFinish.append(self.get_active_channel_data)
         self.update_display()
+    def get_active_channel_data(self):
+        service = self.session.nav.getCurrentService()
+        if service:
+            info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            freq = t_data.get("frequency", 0)
+            if freq > 50000: freq = freq / 1000
+            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
+            sr = t_data.get("symbol_rate", 0) // 1000
+            sid = info.getInfo(iServiceInformation.sSID); vpid = info.getInfo(iServiceInformation.sVideoPID)
+            self["channel_data"].setText(f"{int(freq)} {pol} {sr} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
     def update_display(self):
-        dp = []
+        display_parts = []
         for i in range(16):
-            c = self.key_list[i]; dp.append("[%s]" % c if i == self.index else c)
-            if (i + 1) % 4 == 0 and i < 15: dp.append("-")
-        self["keylabel"].setText("".join(dp)); self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
-        cl = ""
-        for i, c in enumerate(self.chars): cl += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
-        self["char_list"].setText(cl)
+            char = self.key_list[i]; display_parts.append("[%s]" % char if i == self.index else char)
+            if (i + 1) % 4 == 0 and i < 15: display_parts.append("-")
+        self["keylabel"].setText("".join(display_parts))
+        self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
+        char_col = ""
+        for i, c in enumerate(self.chars): char_col += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
+        self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
+    def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
+    def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
     def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.update_display()
     def move_char_down(self): self.char_index = (self.char_index + 1) % len(self.chars); self.update_display()
     def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
