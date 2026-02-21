@@ -51,7 +51,6 @@ def get_oscam_hash(namespace, tsid, onid, sid):
         s = int(str(sid), 16) if isinstance(sid, str) else int(sid)
 
         # التعديل للمطابقة الكاملة مع الـ Hash Logic: CRC32 ORIGINAL
-        # نرسل الـ Namespace كاملاً كما يظهر في الصورة (0DCA2DA0)
         data = struct.pack('>IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
         
         value = 0x2600 ^ 0xffffffff
@@ -298,9 +297,9 @@ class BISSPro(Screen):
         if not service: return
         info = service.info()
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-        # --- الحساب الجديد ليتوافق مع الصورة 17E679FE ---
+        # --- الحساب الجديد ليتوافق مع الهاش الأصلي 17E679FE ---
         full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
-        if self.save_biss_key(full_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
+        if self.save_biss_key(full_id, key, info.getName()): self.res = (True, f"Saved with Original Hash: {full_id}\nFor: {info.getName()}")
         else: self.res = (False, "File Error")
         self.timer.start(100, True)
 
@@ -315,6 +314,7 @@ class BISSPro(Screen):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
+            # التنسيق النهائي لضمان العمل بـ الهاش الأصلي
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
@@ -357,7 +357,7 @@ class BISSPro(Screen):
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            # --- الحساب الجديد ليتوافق مع الصورة 17E679FE ---
+            # --- استخدام الهاش الأصلي في الـ Autoroll ---
             full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -375,7 +375,7 @@ class BISSPro(Screen):
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
                                     if self.save_biss_key(full_id, clean_key, ch_name):
-                                        self.res = (True, f"Found: {ch_name}"); found = True; break
+                                        self.res = (True, f"Found & Saved Original Hash: {full_id}"); found = True; break
             except: pass
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
@@ -385,7 +385,7 @@ class BISSPro(Screen):
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(full_id, clean_key, ch_name): self.res = (True, f"Found: {ch_name}")
+                        if self.save_biss_key(full_id, clean_key, ch_name): self.res = (True, f"Found & Saved Original Hash: {full_id}")
                         else: self.res = (False, "Write Error")
                         found = True
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
@@ -426,7 +426,7 @@ class BissProServiceWatcher:
             freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            # --- الحساب الجديد ليتوافق مع الصورة 17E679FE ---
+            # --- استخدام الهاش الأصلي في بحث الخلفية ---
             full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             headers = {'User-Agent': 'Mozilla/5.0'}; found = False
             try:
@@ -461,7 +461,7 @@ class BissProServiceWatcher:
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Auto) | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
-            addNotification(MessageBox, f"Found: {key}\n{name}", type=MessageBox.TYPE_INFO, timeout=3)
+            addNotification(MessageBox, f"Found & Saved Original Hash: {full_id}\nKey: {key}\n{name}", type=MessageBox.TYPE_INFO, timeout=3)
             return True
         except: return False
 
@@ -522,8 +522,17 @@ class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
         Screen.__init__(self, session)
+
+        # حساب الهاش الأصلي لعرضه في شاشة الإدخال
+        service = session.nav.getCurrentService()
+        display_hash = "N/A"
+        if service:
+            info = service.info()
+            t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            display_hash = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
+
         self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
+        <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Original Hash Mode" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
@@ -540,55 +549,45 @@ class HexInputScreen(Screen):
             <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
-        self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
+        self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(f"Original Hash: {display_hash}"); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
         self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Reset All")
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
             "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
             "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
-            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"),
-            "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"),
-            "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
+            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), 
+            "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
         }, -1)
-        self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
-        self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
-        self.onLayoutFinish.append(self.get_active_channel_data)
-        self.update_display()
-    def get_active_channel_data(self):
-        service = self.session.nav.getCurrentService()
-        if service:
-            info = service.info(); t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            freq = t_data.get("frequency", 0)
-            if freq > 50000: freq = freq / 1000
-            pol = "H" if t_data.get("polarization", 0) == 0 else "V"
-            sr = t_data.get("symbol_rate", 0) // 1000
-            sid = info.getInfo(iServiceInformation.sSID); vpid = info.getInfo(iServiceInformation.sVideoPID)
-            self["channel_data"].setText(f"{int(freq)} {pol} {sr} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
-    def update_display(self):
-        display_parts = []
-        for i in range(16):
-            char = self.key_list[i]; display_parts.append("[%s]" % char if i == self.index else char)
-            if (i + 1) % 4 == 0 and i < 15: display_parts.append("-")
-        self["keylabel"].setText("".join(display_parts))
-        self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
-        char_col = ""
-        for i, c in enumerate(self.chars): char_col += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
-        self["char_list"].setText(char_col)
-    def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
-    def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
-    def reset_all(self): self.key_list = ["0"] * 16; self.index = 0; self.update_display()
-    def move_char_up(self): self.char_index = (self.char_index - 1) % len(self.chars); self.update_display()
-    def move_char_down(self): self.char_index = (self.char_index + 1) % len(self.chars); self.update_display()
-    def keyNum(self, n): self.key_list[self.index] = n; self.index = min(15, self.index + 1); self.update_display()
-    def move_left(self): self.index = max(0, self.index - 1); self.update_display()
-    def move_right(self): self.index = min(15, self.index + 1); self.update_display()
-    def exit_clean(self): self.close(None)
-    def save(self): self.close("".join(self.key_list))
+        self.chars = ["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F"]
+        self.key_data = list(existing_key.ljust(16, "0")[:16])
+        self.pos = 0; self.char_idx = 0
+        self.onLayoutFinish.append(self.update_display)
 
-watcher_instance = None
+    def update_display(self):
+        txt = ""
+        for i, c in enumerate(self.key_data):
+            if i == self.pos: txt += f"[{c}] "
+            else: txt += f"{c} "
+        self["keylabel"].setText(txt.strip())
+        self["char_list"].setText(self.chars[self.char_idx])
+        self["progress"].setValue(int((self.pos + 1) * 6.25))
+
+    def move_left(self): self.pos = (self.pos - 1) % 16; self.char_idx = self.chars.index(self.key_data[self.pos]); self.update_display()
+    def move_right(self): self.pos = (self.pos + 1) % 16; self.char_idx = self.chars.index(self.key_data[self.pos]); self.update_display()
+    def move_char_up(self): self.char_idx = (self.char_idx + 1) % 16; self.key_data[self.pos] = self.chars[self.char_idx]; self.update_display()
+    def move_char_down(self): self.char_idx = (self.char_idx - 1) % 16; self.key_data[self.pos] = self.chars[self.char_idx]; self.update_display()
+    def keyNum(self, n): self.key_data[self.pos] = n; self.move_right()
+    def confirm_char(self): self.move_right()
+    def clear_current(self): self.key_data[self.pos] = "0"; self.char_idx = 0; self.update_display()
+    def reset_all(self): self.key_data = ["0"]*16; self.pos = 0; self.char_idx = 0; self.update_display()
+    def save(self): self.close("".join(self.key_data))
+    def exit_clean(self): self.close(None)
+
 def main(session, **kwargs): session.open(BISSPro)
+def autostart(reason, **kwargs):
+    if reason == 0 and "session" in kwargs: BissProServiceWatcher(kwargs["session"])
+
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
-            PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
-def sessionstart(reason, session=None, **kwargs):
-    global watcher_instance
-    if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
+    return [
+        PluginDescriptor(name="BissPro Smart", description="Auto & Manual BISS Key Original Hash", where=PluginDescriptor.WHERE_PLUGINMENU, icon="plugin.png", fnc=main),
+        PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=autostart)
+    ]
