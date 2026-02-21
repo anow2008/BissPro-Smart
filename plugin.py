@@ -2,20 +2,32 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
+# --- تعديل التوافق مع التنبيهات للصور الحديثة والقديمة ---
+try:
+    from Tools.Notifications import addNotification
+except ImportError:
+    try:
+        from Screens.Notifications import Notifications
+        def addNotification(type, message, timeout=5, **kwargs):
+            Notifications.addNotification(type, message, timeout=timeout)
+    except:
+        def addNotification(*args, **kwargs):
+            pass
+# --------------------------------------------------
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random
-from urllib.request import urlopen
+import os, re, shutil, time, random, csv
+import urllib.request
 from threading import Thread
 
 # ==========================================================
-# الإعدادات والمسارات
+# الإعدادات والمسارات - نسخة v1.0 المعدلة
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.0" 
@@ -23,7 +35,10 @@ VERSION_NUM = "v1.0"
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
-DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss.txt"
+DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss"
+
+SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
 def get_softcam_path():
     paths = [
@@ -36,23 +51,16 @@ def get_softcam_path():
         if os.path.exists(p): return p
     for p in paths:
         if os.path.exists(os.path.dirname(p)): return p
-    return "/etc/tuxbox/config/oscam/SoftCam.Key"
+    return "/etc/tuxbox/config/SoftCam.Key"
 
 def restart_softcam_global():
-    scripts = [
-        "/etc/init.d/softcam", 
-        "/etc/init.d/cardserver", 
-        "/etc/init.d/softcam.oscam", 
-        "/etc/init.d/softcam.ncam",
-        "/etc/init.d/softcam.oscam_emu"
-    ]
+    scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
     restarted = False
     for s in scripts:
         if os.path.exists(s):
             os.system(f"{s} restart >/dev/null 2>&1")
             restarted = True
             break
-    
     if not restarted:
         os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
         time.sleep(1.0)
@@ -72,6 +80,7 @@ class BISSPro(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
+        self.res = (False, "")
         
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
@@ -113,17 +122,27 @@ class BISSPro(Screen):
         except: self.timer.timeout.connect(self.show_result)
         
         self["menu"] = MenuList([])
+        self["menu"].onSelectionChanged.append(self.update_dynamic_logo)
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
         
         self.onLayoutFinish.append(self.build_menu)
-        self.onLayoutFinish.append(self.load_main_logo)
+        self.onLayoutFinish.append(self.update_dynamic_logo)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
 
-    def load_main_logo(self):
-        logo_path = os.path.join(PLUGIN_PATH, "plugin.png")
-        if os.path.exists(logo_path):
-            self["main_logo"].instance.setPixmap(LoadPixmap(path=logo_path))
+    def update_dynamic_logo(self):
+        if not self.instance or "main_logo" not in self or not self["main_logo"].instance:
+            return
+            
+        curr = self["menu"].getCurrent()
+        if curr:
+            act = curr[1][-1]
+            icon_map = {"add": "add.png", "editor": "editor.png", "upd": "Download Softcam.png", "auto": "auto.png"}
+            icon_file = icon_map.get(act, "plugin.png")
+            path = os.path.join(PLUGIN_PATH, "icons/", icon_file)
+            if not os.path.exists(path): path = os.path.join(PLUGIN_PATH, "plugin.png")
+            if os.path.exists(path):
+                self["main_logo"].instance.setPixmap(LoadPixmap(path=path))
 
     def check_for_updates(self):
         Thread(target=self.thread_check_version).start()
@@ -132,35 +151,71 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
+            headers = {'User-Agent': 'Mozilla/5.0'}
             v_url = URL_VERSION + "?nocache=" + str(random.randint(1000, 9999))
-            remote_data = urlopen(v_url, timeout=10, context=ctx).read().decode("utf-8")
+            req = urllib.request.Request(v_url, headers=headers)
+            remote_data = urllib.request.urlopen(req, timeout=10, context=ctx).read().decode("utf-8")
+            
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
-                local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
+                # تحديد الإصدار الحالي للمقارنة
+                local_v = 1.0 
                 if remote_v > local_v:
                     try:
-                        n_url = URL_NOTES + "?nocache=" + str(random.randint(1000, 9999))
-                        update_notes = urlopen(n_url, timeout=7, context=ctx).read().decode("utf-8").strip()
-                    except: update_notes = "New features."
-                    msg = "New Version v%s available!\n\nUpdate?" % str(remote_v)
+                        req_n = urllib.request.Request(URL_NOTES + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
+                        notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
+                    except:
+                        notes = "New update available with performance improvements."
+                    
+                    msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
         if answer:
-            self["status"].setText("Updating...")
+            self["status"].setText("Downloading...")
             Thread(target=self.do_plugin_download).start()
 
     def do_plugin_download(self):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            new_code = urlopen(URL_PLUGIN, timeout=15, context=ctx).read()
-            with open(os.path.join(PLUGIN_PATH, "plugin.py"), "wb") as f: f.write(new_code)
-            self.res = (True, "Updated Successfully! Restart Enigma2.")
-        except Exception as e: self.res = (False, "Failed: " + str(e))
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            req = urllib.request.Request(URL_PLUGIN + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
+            new_code = urllib.request.urlopen(req, timeout=30, context=ctx).read()
+            
+            if len(new_code) > 2000:
+                target_file = os.path.join(PLUGIN_PATH, "plugin.py")
+                os.system("chmod 755 %s" % PLUGIN_PATH)
+                with open(target_file, "wb") as f:
+                    f.write(new_code)
+                for ext in [".pyo", ".pyc"]:
+                    cp = target_file.replace(".py", ext)
+                    if os.path.exists(cp):
+                        try: os.remove(cp)
+                        except: pass
+                self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now to apply changes?", "plugin_upd")
+            else:
+                self.res = (False, "Download incomplete. Please try again.")
+        except Exception as e: 
+            self.res = (False, "Error: " + str(e))
         self.timer.start(100, True)
+
+    def show_result(self): 
+        self["main_progress"].setValue(0)
+        self["status"].setText("Ready")
+        if self.res[0]:
+            if len(self.res) > 2 and self.res[2] == "plugin_upd":
+                self.session.openWithCallback(self.answer_restart, MessageBox, self.res[1], MessageBox.TYPE_YESNO)
+            else:
+                self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO, timeout=5)
+        else:
+            self.session.open(MessageBox, self.res[1], MessageBox.TYPE_ERROR, timeout=5)
+
+    def answer_restart(self, answer):
+        if answer:
+            quitMainloop(3)
 
     def update_clock(self):
         self["time_label"].setText(time.strftime("%H:%M:%S"))
@@ -171,7 +226,7 @@ class BISSPro(Screen):
         menu_items = [
             ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"), 
-            ("Download Softcam", "Full update from server", "upd", icon_dir + "update.png"), 
+            ("Download Softcam", "Full update from server", "upd", icon_dir + "Download Softcam.png"), 
             ("Autoroll", "Smart search for current channel", "auto", icon_dir + "auto.png")
         ]
         lst = []
@@ -217,6 +272,7 @@ class BISSPro(Screen):
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
+            current_date = time.strftime("%d-%m-%Y") # جلب التاريخ الحالي
             target_dir = os.path.dirname(target)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
@@ -224,16 +280,12 @@ class BISSPro(Screen):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
+            # تم التعديل هنا: حفظ اسم القناة الفعلي من الجهاز + التاريخ
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
             restart_softcam_global(); return True
         except: return False
-
-    def show_result(self): 
-        self["main_progress"].setValue(0)
-        self["status"].setText("Ready")
-        self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO if self.res[0] else MessageBox.TYPE_ERROR, timeout=5)
 
     def action_update(self): 
         self["status"].setText("Downloading Softcam..."); 
@@ -244,10 +296,10 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            data = urlopen("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", context=ctx).read()
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            req = urllib.request.Request("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", headers=headers)
+            data = urllib.request.urlopen(req, context=ctx).read()
             target_path = get_softcam_path()
-            target_dir = os.path.dirname(target_path)
-            if not os.path.exists(target_dir): os.makedirs(target_dir)
             with open(target_path, "wb") as f: f.write(data)
             os.chmod(target_path, 0o644)
             restart_softcam_global()
@@ -258,38 +310,60 @@ class BISSPro(Screen):
     def action_auto(self):
         service = self.session.nav.getCurrentService()
         if service: 
-            self["status"].setText("Autorolling..."); 
-            self["main_progress"].setValue(40); 
+            self["status"].setText("Searching..."); self["main_progress"].setValue(40)
             Thread(target=self.do_auto, args=(service,)).start()
 
     def do_auto(self, service):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName()
+            info = service.info(); ch_name = info.getName() # اسم القناة من الجهاز
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            
             freq_raw = t_data.get("frequency", 0)
-            curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
+            curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
+            curr_pol = "V" if t_data.get("polarization", 0) else "H"
+            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
+            
             raw_sid = info.getInfo(iServiceInformation.sSID)
             raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-            raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
-            self["main_progress"].setValue(70)
-            pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
-            m = re.search(pattern, raw_data, re.I)
-            if m:
-                clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                if len(clean_key) == 16:
-                    if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Key Found: {clean_key}")
-                    else: self.res = (False, "Write Error")
-                else: self.res = (False, "Invalid key length")
-            else: self.res = (False, "Not found for %s" % curr_freq)
+            
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            found = False
+            try:
+                req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
+                response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
+                for row in csv.reader(response):
+                    if len(row) >= 2:
+                        sheet_info = row[0].upper()
+                        nums = re.findall(r'\d+', sheet_info)
+                        if len(nums) >= 2:
+                            sheet_freq = int(nums[0])
+                            sheet_sr = int(nums[1])
+                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                clean_key = row[1].replace(" ", "").strip().upper()
+                                if len(clean_key) == 16:
+                                    # تعديل هنا: تجاهل اسم الجدول واستخدام اسم الجهاز ch_name
+                                    if self.save_biss_key(combined_id, clean_key, ch_name):
+                                        self.res = (True, f"Found: {ch_name}"); found = True; break
+            except: pass
+            
+            if not found:
+                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
+                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
+                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                m = re.search(pattern, raw_data, re.I)
+                if m:
+                    clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+                    if len(clean_key) == 16:
+                        if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {ch_name}")
+                        else: self.res = (False, "Write Error")
+                        found = True
+            if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
 
-# ==========================================================
-# الخلفية: المراقب الذكي (Background Scanner) - التلقائي
-# ==========================================================
 class BissProServiceWatcher:
     def __init__(self, session):
         self.session = session
@@ -298,70 +372,68 @@ class BissProServiceWatcher:
         except: self.check_timer.timeout.connect(self.check_service)
         self.session.nav.event.append(self.on_event)
         self.is_scanning = False
-
     def on_event(self, event):
-        if event in (0, 1): 
-            self.check_timer.start(6000, True) 
-
+        if event in (0, 1): self.check_timer.start(6000, True)
     def check_service(self):
         if self.is_scanning: return
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        
-        # التعديل الجديد: التحقق من التشفير والتأكد من وجود نظام BISS (CAID 0x2600)
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
                 for caid in caids:
-                    if caid == 0x2600:
-                        is_biss = True
-                        break
-            
+                    if caid == 0x2600: is_biss = True; break
             if is_biss:
                 self.is_scanning = True
                 Thread(target=self.bg_do_auto, args=(service,)).start()
-
     def bg_do_auto(self, service):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info()
-            ch_name = info.getName()
+            info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            if not t_data: 
-                self.is_scanning = False
-                return
-            freq_raw = t_data.get("frequency", 0)
-            curr_freq = str(int(freq_raw / 1000 if freq_raw > 50000 else freq_raw))
-            raw_sid = info.getInfo(iServiceInformation.sSID)
-            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
+            if not t_data: self.is_scanning = False; return
+            freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
+            curr_pol = "V" if t_data.get("polarization", 0) else "H"
+            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
+            raw_sid = info.getInfo(iServiceInformation.sSID); raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
             combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
-            raw_data = urlopen(DATA_SOURCE, timeout=12, context=ctx).read().decode("utf-8")
-            pattern = re.escape(curr_freq) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
-            m = re.search(pattern, raw_data, re.I)
-            if m:
-                clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                if len(clean_key) == 16:
-                    self.save_biss_key_background(combined_id, clean_key, ch_name)
+            headers = {'User-Agent': 'Mozilla/5.0'}; found = False
+            try:
+                req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
+                resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
+                for row in csv.reader(resp):
+                    if len(row) >= 2:
+                        sheet_info = row[0].upper(); nums = re.findall(r'\d+', sheet_info)
+                        if len(nums) >= 2:
+                            if abs(curr_freq - int(nums[0])) <= 3 and curr_pol in sheet_info:
+                                clean = row[1].replace(" ", "").strip().upper()
+                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, ch_name); found = True; break
+            except: pass
+            if not found:
+                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
+                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
+                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
+                m = re.search(pattern, raw_data, re.I)
+                if m:
+                    clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
+                    if len(clean_key) == 16: self.save_biss_key_background(combined_id, clean_key, ch_name)
         except: pass
         self.is_scanning = False
-
     def save_biss_key_background(self, full_id, key, name):
-        target = get_softcam_path()
+        target = get_softcam_path(); current_date = time.strftime("%d-%m-%Y")
         try:
-            target_dir = os.path.dirname(target)
-            if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Auto) | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
-            os.chmod(target, 0o644)
-            restart_softcam_global()
+            os.chmod(target, 0o644); restart_softcam_global()
+            addNotification(MessageBox, f"Found: {key}\n{name}", type=MessageBox.TYPE_INFO, timeout=3)
             return True
         except: return False
 
@@ -427,9 +499,9 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(240)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
+            <eLabel text="OK: confirm  |  ◀ ▶ : move position  |  ▲ ▼ : letters" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(28)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel text="OK: Confirm | Arrows: Move | Numbers: Input" position="{self.ui.px(10)},{self.ui.px(410)}" size="{self.ui.px(1130)},{self.ui.px(35)}" font="Regular;{self.ui.font(24)}" halign="center" foregroundColor="#888888" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
@@ -438,16 +510,16 @@ class HexInputScreen(Screen):
             <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
             <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(230)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
         self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
         self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Reset All")
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
             "cancel": self.exit_clean, "red": self.exit_clean, "green": self.save, "yellow": self.clear_current, "blue": self.reset_all,
             "ok": self.confirm_char, "left": self.move_left, "right": self.move_right, "up": self.move_char_up, "down": self.move_char_down,
-            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), 
-            "3": lambda: self.keyNum("3"), "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), 
-            "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"), "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
+            "0": lambda: self.keyNum("0"), "1": lambda: self.keyNum("1"), "2": lambda: self.keyNum("2"), "3": lambda: self.keyNum("3"),
+            "4": lambda: self.keyNum("4"), "5": lambda: self.keyNum("5"), "6": lambda: self.keyNum("6"), "7": lambda: self.keyNum("7"),
+            "8": lambda: self.keyNum("8"), "9": lambda: self.keyNum("9")
         }, -1)
         self.key_list = list(existing_key.upper()) if (existing_key and len(existing_key) == 16) else ["0"] * 16
         self.index = 0; self.chars = ["A","B","C","D","E","F"]; self.char_index = 0
@@ -460,8 +532,9 @@ class HexInputScreen(Screen):
             freq = t_data.get("frequency", 0)
             if freq > 50000: freq = freq / 1000
             pol = "H" if t_data.get("polarization", 0) == 0 else "V"
+            sr = t_data.get("symbol_rate", 0) // 1000
             sid = info.getInfo(iServiceInformation.sSID); vpid = info.getInfo(iServiceInformation.sVideoPID)
-            self["channel_data"].setText(f"FREQ: {int(freq)} {pol} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
+            self["channel_data"].setText(f"{int(freq)} {pol} {sr} | SID: %04X | VPID: %04X" % (sid&0xFFFF, vpid&0xFFFF if vpid!=-1 else 0))
     def update_display(self):
         display_parts = []
         for i in range(16):
@@ -484,19 +557,10 @@ class HexInputScreen(Screen):
     def save(self): self.close("".join(self.key_list))
 
 watcher_instance = None
-
-def main(session, **kwargs):
-    session.open(BISSPro)
-
+def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
     return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
-
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
-    if reason == 0 and session is not None: 
-        if watcher_instance is None:
-            watcher_instance = BissProServiceWatcher(session)
-
-
-
+    if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
