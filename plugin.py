@@ -538,7 +538,7 @@ class HexInputScreen(Screen):
             <eLabel position="{self.ui.px(330)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
@@ -593,12 +593,32 @@ class HexInputScreen(Screen):
         self.close("".join(self.key))
 
 # ==========================================================
-# Main Entry Point
+# Main Entry Point & Session Management
 # ==========================================================
+
+watcher_instance = None
+
+def sessionstart(reason, **kwargs):
+    global watcher_instance
+    if "session" in kwargs and reason == 0:
+        session = kwargs["session"]
+        if watcher_instance is None:
+            watcher_instance = BissProServiceWatcher(session)
+
 def main(session, **kwargs):
     session.open(BISSPro)
 
 def Plugins(**kwargs):
     return [
-        PluginDescriptor(name="BissPro Smart", description="BISS Key Manager & Autoroll", where=PluginDescriptor.WHERE_PLUGINMENU, icon="plugin.png", fnc=main)
+        PluginDescriptor(
+            name="BissPro Smart", 
+            description="BISS Key Manager & Autoroll " + VERSION_NUM, 
+            where=PluginDescriptor.WHERE_PLUGINMENU, 
+            icon="plugin.png", 
+            fnc=main
+        ),
+        PluginDescriptor(
+            where=PluginDescriptor.WHERE_SESSIONSTART, 
+            fnc=sessionstart
+        )
     ]
