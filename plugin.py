@@ -28,8 +28,7 @@ from threading import Thread
 from array import array
 
 # ==========================================================
-# دالة الهاش الاحترافية المتوافقة تماماً مع صورة E2 BISS Key Editor
-# تعطي نتيجة 17E679FE لقناة الجزائر الأرضية
+# دالة الهاش الاحترافية المتوافقة تماماً مع صورة 
 # ==========================================================
 crc_table = array("L")
 for byte in range(256):
@@ -591,3 +590,4 @@ def Plugins(**kwargs):
         PluginDescriptor(name="BissPro Smart", description="Auto & Manual BISS Key Original Hash", where=PluginDescriptor.WHERE_PLUGINMENU, icon="plugin.png", fnc=main),
         PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=autostart)
     ]
+
