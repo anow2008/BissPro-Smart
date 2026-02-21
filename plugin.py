@@ -22,15 +22,25 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random, csv
+import os, re, shutil, time, random, csv, struct
 import urllib.request
 from threading import Thread
-import binascii
-import struct
+from array import array
 
 # ==========================================================
-# دالة الهاش الجديدة (CRC32) - متوافقة مع Oscam/Ncam
+# دالة الهاش الاحترافية المتوافقة تماماً مع Oscam/Ncam (CRC32 0x2600)
 # ==========================================================
+crc_table = array("L")
+for byte in range(256):
+    crc = 0
+    for bit in range(8):
+        if (byte ^ crc) & 1:
+            crc = (crc >> 1) ^ 0xEDB88320
+        else:
+            crc >>= 1
+        byte >>= 1
+    crc_table.append(crc)
+
 def get_oscam_hash(namespace, tsid, onid, sid):
     try:
         n = int(str(namespace), 16) if isinstance(namespace, str) else int(namespace)
@@ -38,8 +48,12 @@ def get_oscam_hash(namespace, tsid, onid, sid):
         o = int(str(onid), 16) if isinstance(onid, str) else int(onid)
         s = int(str(sid), 16) if isinstance(sid, str) else int(sid)
         data = struct.pack('>IHHH', n & 0xFFFF0000, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
-        crc = binascii.crc32(data) & 0xffffffff
-        return "%08X" % crc
+        value = 0x2600 ^ 0xffffffff
+        for ch in data:
+            byte_val = ch if isinstance(ch, int) else ord(ch)
+            value = crc_table[(byte_val ^ value) & 0xff] ^ (value >> 8)
+        final_hash = value ^ 0xffffffff
+        return "%08X" % (final_hash & 0xFFFFFFFF)
     except:
         return "00000000"
 
@@ -280,8 +294,8 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # --- استبدال الهاش بالجديد ---
         t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+        # --- تعديل الهاش ليتوافق مع أوسكام ---
         full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
         if self.save_biss_key(full_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
         else: self.res = (False, "File Error")
@@ -290,7 +304,7 @@ class BISSPro(Screen):
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
-            current_date = time.strftime("%d-%m-%Y")
+            current_date = time.strftime("%d-%m-%Y") 
             target_dir = os.path.dirname(target)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
@@ -334,13 +348,15 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName()
+            info = service.info(); ch_name = info.getName() 
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
+            
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
-            # --- الهاش الجديد ---
+            
+            # --- تعديل الهاش ليتوافق مع أوسكام ---
             full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -355,7 +371,7 @@ class BISSPro(Screen):
                         if len(nums) >= 2:
                             sheet_freq = int(nums[0])
                             sheet_sr = int(nums[1])
-                            if abs(curr_freq - sheet_freq) <= 5 and curr_pol in sheet_info:
+                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
                                     if self.save_biss_key(full_id, clean_key, ch_name):
@@ -395,7 +411,9 @@ class BissProServiceWatcher:
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
-            if caids and 0x2600 in caids: is_biss = True
+            if caids:
+                for caid in caids:
+                    if caid == 0x2600: is_biss = True; break
             if is_biss:
                 self.is_scanning = True
                 Thread(target=self.bg_do_auto, args=(service,)).start()
@@ -408,7 +426,8 @@ class BissProServiceWatcher:
             if not t_data: self.is_scanning = False; return
             freq_raw = t_data.get("frequency", 0); curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
-            # --- الهاش الجديد ---
+            curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
+            # --- تعديل الهاش ليتوافق مع أوسكام ---
             full_id = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
             headers = {'User-Agent': 'Mozilla/5.0'}; found = False
             try:
@@ -417,9 +436,10 @@ class BissProServiceWatcher:
                 for row in csv.reader(resp):
                     if len(row) >= 2:
                         sheet_info = row[0].upper(); nums = re.findall(r'\d+', sheet_info)
-                        if len(nums) >= 2 and abs(curr_freq - int(nums[0])) <= 5 and curr_pol in sheet_info:
-                            clean = row[1].replace(" ", "").strip().upper()
-                            if len(clean) == 16: self.save_biss_key_background(full_id, clean, ch_name); found = True; break
+                        if len(nums) >= 2:
+                            if abs(curr_freq - int(nums[0])) <= 3 and curr_pol in sheet_info:
+                                clean = row[1].replace(" ", "").strip().upper()
+                                if len(clean) == 16: self.save_biss_key_background(full_id, clean, ch_name); found = True; break
             except: pass
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
