@@ -521,8 +521,10 @@ class HexInputScreen(Screen):
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             display_hash = get_oscam_hash(t_data.get("namespace", 0), t_data.get("transport_stream_id", 0), t_data.get("original_network_id", 0), info.getInfo(iServiceInformation.sSID))
         
-        self.key = list(existing_key.ljust(16, '0')[:16])
+        self.key = list(existing_key.ljust(16, '0')[:16].upper())
         self.pos = 0
+        self.chars = "0123456789ABCDEF"
+        
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Original Hash Mode" backgroundColor="#1a1a1a">
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
@@ -530,63 +532,73 @@ class HexInputScreen(Screen):
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
             <eLabel text="OK: confirm  |  ◀ ▶ : move position  |  ▲ ▼ : letters" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(28)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(330)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
             <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
+            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
             <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
         </screen>"""
-        self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(f"Original Hash: {display_hash}"); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
-        self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Back")
+        
+        self["channel"] = Label(f"{channel_name}")
+        self["channel_data"] = Label(f"Original Hash: {display_hash}")
+        self["keylabel"] = Label("")
+        self["progress"] = ProgressBar()
+        self["l_red"] = Label("Exit")
+        self["l_green"] = Label("Save")
+        self["l_yellow"] = Label("Clear")
+        self["l_blue"] = Label("Back")
+        
         self["actions"] = ActionMap(["DirectionActions", "OkCancelActions", "ColorActions"], {
             "left": self.go_left, "right": self.go_right, "up": self.go_up, "down": self.go_down,
-            "ok": self.save, "cancel": self.close, "red": self.close, "green": self.save, "yellow": self.clear
-        }, -1)
-        self.update_key()
+            "ok": self.save, "cancel": self.close, "red": self.close, "green": self.save, "yellow": self.clear, "blue": self.go_left
+        })
+        self.update_key_display()
 
-    def update_key(self):
-        txt = ""
-        for i, char in enumerate(self.key):
-            if i == self.pos: txt += "|%s|" % char
-            else: txt += char
-            if i == 7: txt += " "
-        self["keylabel"].setText(txt)
+    def update_key_display(self):
+        res = ""
+        for i, c in enumerate(self.key):
+            if i == self.pos: res += f"[{c}] "
+            else: res += f"{c} "
+        self["keylabel"].setText(res.strip())
         self["progress"].setValue(int((self.pos + 1) * 6.25))
 
-    def go_left(self): self.pos = (self.pos - 1) % 16; self.update_key()
-    def go_right(self): self.pos = (self.pos + 1) % 16; self.update_key()
+    def go_left(self):
+        self.pos = (self.pos - 1) % 16
+        self.update_key_display()
+
+    def go_right(self):
+        self.pos = (self.pos + 1) % 16
+        self.update_key_display()
+
     def go_up(self):
-        chars = "0123456789ABCDEF"
-        idx = chars.find(self.key[self.pos])
-        self.key[self.pos] = chars[(idx + 1) % 16]
-        self.update_key()
+        idx = self.chars.find(self.key[self.pos])
+        self.key[self.pos] = self.chars[(idx + 1) % 16]
+        self.update_key_display()
+
     def go_down(self):
-        chars = "0123456789ABCDEF"
-        idx = chars.find(self.key[self.pos])
-        self.key[self.pos] = chars[(idx - 1) % 16]
-        self.update_key()
-    def clear(self): self.key = list("0000000000000000"); self.pos = 0; self.update_key()
-    def save(self): self.close("".join(self.key))
+        idx = self.chars.find(self.key[self.pos])
+        self.key[self.pos] = self.chars[(idx - 1) % 16]
+        self.update_key_display()
+
+    def clear(self):
+        self.key = list("0" * 16)
+        self.pos = 0
+        self.update_key_display()
+
+    def save(self):
+        self.close("".join(self.key))
 
 # ==========================================================
-# Plugin Entry Point
+# Main Entry Point
 # ==========================================================
-_watcher = None
-def sessionstart(reason, **kwargs):
-    global _watcher
-    if "session" in kwargs and _watcher is None:
-        _watcher = BissProServiceWatcher(kwargs["session"])
-
 def main(session, **kwargs):
     session.open(BISSPro)
 
 def Plugins(**kwargs):
     return [
-        PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart),
-        PluginDescriptor(name="BissPro Smart", description="Advanced BISS Auto-Roll v1.0", where=PluginDescriptor.WHERE_PLUGINMENU, icon="plugin.png", fnc=main)
+        PluginDescriptor(name="BissPro Smart", description="BISS Key Manager & Autoroll", where=PluginDescriptor.WHERE_PLUGINMENU, icon="plugin.png", fnc=main)
     ]
