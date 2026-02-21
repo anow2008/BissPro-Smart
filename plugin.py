@@ -29,6 +29,7 @@ from array import array
 
 # ==========================================================
 # دالة الهاش الاحترافية المتوافقة تماماً مع صورة 
+# تم التعديل إلى Little-endian لضمان تطابق الهاش (e.g. 17E679FE)
 # ==========================================================
 crc_table = array("L")
 for byte in range(256):
@@ -48,8 +49,9 @@ def get_oscam_hash(namespace, tsid, onid, sid):
         o = int(str(onid), 16) if isinstance(onid, str) else int(onid)
         s = int(str(sid), 16) if isinstance(sid, str) else int(sid)
 
-        data = struct.pack('>IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
-        value = 0x2600 ^ 0xffffffff
+        # تم تغيير الترتيب لـ Little-endian باستخدام '<' ليتوافق مع أوسكام الحديث
+        data = struct.pack('<IHHH', n, t & 0xFFFF, o & 0xFFFF, s & 0xFFFF)
+        value = 0 ^ 0xffffffff
         for ch in data:
             byte_val = ch if isinstance(ch, int) else ord(ch)
             value = crc_table[(byte_val ^ value) & 0xff] ^ (value >> 8)
