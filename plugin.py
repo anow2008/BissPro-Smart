@@ -73,7 +73,7 @@ def getHash(session):
 # الإعدادات والمسارات الأصلية
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.2-Hash" 
+VERSION_NUM = "v1.2" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
@@ -325,6 +325,7 @@ class BISSPro(Screen):
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
+            current_date = time.strftime("%d/%m/%Y")
             target_dir = os.path.dirname(target)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
             lines = []
@@ -332,7 +333,8 @@ class BISSPro(Screen):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name}\n")
+            # تم التعديل: كتابة الاسم والتاريخ فقط
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
             restart_softcam_global(); return True
@@ -486,12 +488,14 @@ class BissProServiceWatcher:
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
+            current_date = time.strftime("%d/%m/%Y")
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (HashRoll)\n")
+            # تم حذف كلمة HashRoll بناءً على طلبك
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
             addNotification(MessageBox, f"Found: {key}\nHash: {full_id}", type=MessageBox.TYPE_INFO, timeout=3)
@@ -620,7 +624,7 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2-Hash", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
