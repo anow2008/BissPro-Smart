@@ -399,7 +399,8 @@ class BISSPro(Screen):
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    if self.save_biss_key(ch_hash, clean_key, row[2] if len(row) > 2 else ch_name):
+                                    # --- التعديل هنا: استخدام ch_name بدلاً من row[2] ---
+                                    if self.save_biss_key(ch_hash, clean_key, ch_name):
                                         self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}"); found = True; break
             except: pass
             
@@ -411,7 +412,8 @@ class BISSPro(Screen):
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(ch_hash, clean_key, ch_name)
+                        if self.save_biss_key(ch_hash, clean_key, ch_name):
+                            self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}")
                         else: self.res = (False, "Write Error")
                         found = True
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
@@ -473,7 +475,8 @@ class BissProServiceWatcher:
                             sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean = row[1].replace(" ", "").strip().upper()
-                                if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, row[2] if len(row)>2 else ch_name); found = True; break
+                                # --- التعديل هنا أيضاً للبحث التلقائي في الخلفية ---
+                                if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, ch_name); found = True; break
             except: pass
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
@@ -494,7 +497,6 @@ class BissProServiceWatcher:
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            # تم حذف كلمة HashRoll بناءً على طلبك
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
@@ -629,7 +631,3 @@ def Plugins(**kwargs):
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
-
-
-
-
