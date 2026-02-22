@@ -30,7 +30,7 @@ from threading import Thread
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.2" 
+VERSION_NUM = "v1.0" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
@@ -572,9 +572,10 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.1", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
+
 
