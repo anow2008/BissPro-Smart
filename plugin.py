@@ -26,11 +26,54 @@ import os, re, shutil, time, random, csv
 import urllib.request
 from threading import Thread
 
+# --- إضافة مكتبات الهاش المدمجة ---
+from array import array
+import binascii
+
 # ==========================================================
-# الإعدادات والمسارات
+# إعدادات الهاش CRC32 (طريق الحفظ بالهاش)
+# ==========================================================
+crc32_table = array("L")
+for byte in range(256):
+    crc = 0
+    for bit in range(8):
+        if (byte ^ crc) & 1:
+            crc = (crc >> 1) ^ 0xEDB88320
+        else:
+            crc >>= 1
+        byte >>= 1
+    crc32_table.append(crc)
+
+def crc32_calc(string_data):
+    value = 0x2600 ^ 0xffffffff
+    for ch in string_data:
+        try:
+            value = crc32_table[(ord(ch) ^ value) & 0xff] ^ (value >> 8)
+        except:
+            value = crc32_table[(ch ^ value) & 0xff] ^ (value >> 8)
+    return value ^ 0xffffffff
+
+def getHash(session):
+    try:
+        ref = session.nav.getCurrentlyPlayingServiceReference()
+        if not ref: return None
+        sid = ref.getUnsignedData(1)
+        tsid = ref.getUnsignedData(2)
+        onid = ref.getUnsignedData(3)
+        namespace = ref.getUnsignedData(4) | 0xA0000000
+        if namespace & 0xFFFF == 0:
+            data = "%04X%04X%04X%08X" % (sid, tsid, onid, namespace)
+        else:
+            data = "%04X%08X" % (sid, namespace)
+        return "%08X" % (crc32_calc(binascii.unhexlify(data)) & 0xFFFFFFFF)
+    except:
+        return None
+
+# ==========================================================
+# الإعدادات والمسارات الأصلية
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.0" 
+VERSION_NUM = "v1.2-Hash" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
@@ -159,7 +202,7 @@ class BISSPro(Screen):
             remote_search = re.search(r"(\d+\.\d+)", remote_data)
             if remote_search:
                 remote_v = float(remote_search.group(1))
-                local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM).group(1))
+                local_v = float(re.search(r"(\d+\.\d+)", VERSION_NUM.split('-')[0]).group(1))
                 if remote_v > local_v:
                     try:
                         req_n = urllib.request.Request(URL_NOTES + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
@@ -186,19 +229,14 @@ class BISSPro(Screen):
             
             if len(new_code) > 2000:
                 target_file = os.path.join(PLUGIN_PATH, "plugin.py")
-                
-                # إعطاء صلاحيات الكتابة للمجلد
                 os.system("chmod 755 %s" % PLUGIN_PATH)
-                
                 with open(target_file, "wb") as f:
                     f.write(new_code)
-                
                 for ext in [".pyo", ".pyc"]:
                     cp = target_file.replace(".py", ext)
                     if os.path.exists(cp):
                         try: os.remove(cp)
                         except: pass
-                    
                 self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now to apply changes?", "plugin_upd")
             else:
                 self.res = (False, "Download incomplete. Please try again.")
@@ -209,9 +247,7 @@ class BISSPro(Screen):
     def show_result(self): 
         self["main_progress"].setValue(0)
         self["status"].setText("Ready")
-        
         if self.res[0]:
-            # التحقق إذا كان التحديث يخص البلجن (يحتاج ريستارت)
             if len(self.res) > 2 and self.res[2] == "plugin_upd":
                 self.session.openWithCallback(self.answer_restart, MessageBox, self.res[1], MessageBox.TYPE_YESNO)
             else:
@@ -220,8 +256,7 @@ class BISSPro(Screen):
             self.session.open(MessageBox, self.res[1], MessageBox.TYPE_ERROR, timeout=5)
 
     def answer_restart(self, answer):
-        if answer:
-            quitMainloop(3)
+        if answer: quitMainloop(3)
 
     def update_clock(self):
         self["time_label"].setText(time.strftime("%H:%M:%S"))
@@ -230,7 +265,7 @@ class BISSPro(Screen):
     def build_menu(self):
         icon_dir = os.path.join(PLUGIN_PATH, "icons/")
         menu_items = [
-            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
+            ("Add Key", "Manual BISS Entry (Hash Mode)", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"), 
             ("Download Softcam", "Full update from server", "upd", icon_dir + "Download Softcam.png"), 
             ("Autoroll", "Smart search for current channel", "auto", icon_dir + "auto.png")
@@ -261,7 +296,11 @@ class BISSPro(Screen):
 
     def action_add(self):
         service = self.session.nav.getCurrentService()
-        if service: self.session.openWithCallback(self.manual_done, HexInputScreen, service.info().getName())
+        if service: 
+            ch_hash = getHash(self.session)
+            display_name = service.info().getName()
+            if ch_hash: display_name += " (Hash: %s)" % ch_hash
+            self.session.openWithCallback(self.manual_done, HexInputScreen, display_name)
 
     def action_editor(self): self.session.open(BissManagerList)
 
@@ -270,9 +309,17 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        combined_id = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
-        if self.save_biss_key(combined_id, key, info.getName()): self.res = (True, f"Saved: {info.getName()}")
-        else: self.res = (False, "File Error")
+        
+        # استخدام الهاش الجديد كأولوية
+        ch_hash = getHash(self.session)
+        if not ch_hash:
+            # طريقة احتياطية قديمة لو فشل الهاش
+            ch_hash = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
+            
+        if self.save_biss_key(ch_hash, key, info.getName()): 
+            self.res = (True, f"Saved Hash: {ch_hash}\nChannel: {info.getName()}")
+        else: 
+            self.res = (False, "File Error")
         self.timer.start(100, True)
 
     def save_biss_key(self, full_id, key, name):
@@ -303,7 +350,6 @@ class BISSPro(Screen):
             headers = {'User-Agent': 'Mozilla/5.0'}
             req = urllib.request.Request("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", headers=headers)
             data = urllib.request.urlopen(req, context=ctx).read()
-            
             target_path = get_softcam_path()
             with open(target_path, "wb") as f: f.write(data)
             os.chmod(target_path, 0o644)
@@ -324,15 +370,17 @@ class BISSPro(Screen):
             ctx = ssl._create_unverified_context()
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
-            
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
-            raw_sid = info.getInfo(iServiceInformation.sSID)
-            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            # محاولة الحصول على الهاش أولاً للبحث المتقدم
+            ch_hash = getHash(self.session)
+            if not ch_hash:
+                raw_sid = info.getInfo(iServiceInformation.sSID)
+                raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
+                ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -349,8 +397,8 @@ class BISSPro(Screen):
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    if self.save_biss_key(combined_id, clean_key, row[2] if len(row) > 2 else ch_name):
-                                        self.res = (True, f"Found: {clean_key}"); found = True; break
+                                    if self.save_biss_key(ch_hash, clean_key, row[2] if len(row) > 2 else ch_name):
+                                        self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}"); found = True; break
             except: pass
             
             if not found:
@@ -361,7 +409,7 @@ class BISSPro(Screen):
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
                     if len(clean_key) == 16:
-                        if self.save_biss_key(combined_id, clean_key, ch_name): self.res = (True, f"Found: {clean_key}")
+                        if self.save_biss_key(ch_hash, clean_key, ch_name): self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}")
                         else: self.res = (False, "Write Error")
                         found = True
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
@@ -399,15 +447,16 @@ class BissProServiceWatcher:
             info = service.info(); ch_name = info.getName()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: self.is_scanning = False; return
-            
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
-            raw_sid = info.getInfo(iServiceInformation.sSID)
-            raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
-            combined_id = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
+            ch_hash = getHash(self.session)
+            if not ch_hash:
+                raw_sid = info.getInfo(iServiceInformation.sSID)
+                raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
+                ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
@@ -419,11 +468,10 @@ class BissProServiceWatcher:
                         sheet_info = row[0].upper()
                         nums = re.findall(r'\d+', sheet_info)
                         if len(nums) >= 2:
-                            sheet_freq = int(nums[0])
-                            sheet_sr = int(nums[1])
+                            sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                 clean = row[1].replace(" ", "").strip().upper()
-                                if len(clean) == 16: self.save_biss_key_background(combined_id, clean, row[2] if len(row)>2 else ch_name); found = True; break
+                                if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, row[2] if len(row)>2 else ch_name); found = True; break
             except: pass
             if not found:
                 req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
@@ -432,7 +480,7 @@ class BissProServiceWatcher:
                 m = re.search(pattern, raw_data, re.I)
                 if m:
                     clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                    if len(clean_key) == 16: self.save_biss_key_background(combined_id, clean_key, ch_name)
+                    if len(clean_key) == 16: self.save_biss_key_background(ch_hash, clean_key, ch_name)
         except: pass
         self.is_scanning = False
     def save_biss_key_background(self, full_id, key, name):
@@ -443,10 +491,10 @@ class BissProServiceWatcher:
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (AutoRoll)\n")
+            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (HashRoll)\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
-            addNotification(MessageBox, f"Found: {key}", type=MessageBox.TYPE_INFO, timeout=3)
+            addNotification(MessageBox, f"Found: {key}\nHash: {full_id}", type=MessageBox.TYPE_INFO, timeout=3)
             return True
         except: return False
 
@@ -572,10 +620,8 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2-Hash", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
-
-
