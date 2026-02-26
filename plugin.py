@@ -2,6 +2,7 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
+from Screens.ChoiceBox import ChoiceBox
 
 # --- تم تبسيط التنبيهات لإلغاء المزعج منها والحفاظ على استقرار البلجن ---
 def addNotification(*args, **kwargs):
@@ -19,7 +20,6 @@ from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random, csv
 import urllib.request
 from threading import Thread
-
 from array import array
 import binascii
 
@@ -66,13 +66,13 @@ def getHash(session):
 # الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.0" 
+VERSION_NUM = "v1.1" 
+MODE_FILE = PLUGIN_PATH + "mode.txt" # ملف حفظ الوضع
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 
-# تم حذف DATA_SOURCE (GitHub) والاعتماد فقط على Google Sheet
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
@@ -118,6 +118,14 @@ class BISSPro(Screen):
         Screen.__init__(self, session)
         self.res = (False, "")
         
+        # قراءة الوضع المحفوظ أو استخدام الافتراضي
+        self.save_mode = "dual"
+        if os.path.exists(MODE_FILE):
+            try:
+                with open(MODE_FILE, "r") as f:
+                    self.save_mode = f.read().strip().lower()
+            except: pass
+        
         self.skin = f"""
         <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
             <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
@@ -136,6 +144,7 @@ class BISSPro(Screen):
             <eLabel position="{self.ui.px(790)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
             <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
             <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
+            <eLabel text="MENU: Save Mode" position="{self.ui.px(50)},{self.ui.px(525)}" size="{self.ui.px(250)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="left" foregroundColor="#888888" transparent="1" />
         </screen>"""
         
         self["btn_red"] = Label("Add Key")
@@ -143,7 +152,7 @@ class BISSPro(Screen):
         self["btn_yellow"] = Label("Download Softcam")
         self["btn_blue"] = Label("Autoroll")
         self["version_label"] = Label(f"Ver: {VERSION_NUM}")
-        self["status"] = Label("Ready")
+        self["status"] = Label("Mode: " + self.save_mode.upper())
         self["time_label"] = Label(""); self["date_label"] = Label("")
         self["main_progress"] = ProgressBar()
         self["main_logo"] = Pixmap()
@@ -159,12 +168,38 @@ class BISSPro(Screen):
         
         self["menu"] = MenuList([])
         self["menu"].onSelectionChanged.append(self.update_dynamic_logo)
-        self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"ok": self.ok, "cancel": self.close, "red": self.action_add, "green": self.action_editor, "yellow": self.action_update, "blue": self.action_auto}, -1)
+        self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "MenuActions"], {
+            "ok": self.ok, 
+            "cancel": self.close, 
+            "menu": self.open_settings,
+            "red": self.action_add, 
+            "green": self.action_editor, 
+            "yellow": self.action_update, 
+            "blue": self.action_auto
+        }, -1)
         
         self.onLayoutFinish.append(self.build_menu)
         self.onLayoutFinish.append(self.update_dynamic_logo)
         self.onLayoutFinish.append(self.check_for_updates)
         self.update_clock()
+
+    def open_settings(self):
+        options = [
+            ("Dual Mode (Smart + Classic)", "dual"),
+            ("Smart Hash Only", "smart"),
+            ("Classic (SID/VPID) Only", "classic")
+        ]
+        self.session.openWithCallback(self.set_save_mode, ChoiceBox, title="Permanent Saving Method:", list=options)
+
+    def set_save_mode(self, mode):
+        if mode:
+            selected_mode = mode[1]
+            self.save_mode = selected_mode
+            try:
+                with open(MODE_FILE, "w") as f:
+                    f.write(selected_mode)
+            except: pass
+            self["status"].setText("Mode Saved: " + selected_mode.upper())
 
     def update_dynamic_logo(self):
         if not self.instance or "main_logo" not in self or not self["main_logo"].instance:
@@ -239,7 +274,7 @@ class BISSPro(Screen):
 
     def show_result(self): 
         self["main_progress"].setValue(0)
-        self["status"].setText("Ready")
+        self["status"].setText("Mode: " + self.save_mode.upper())
         if self.res[0]:
             if len(self.res) > 2 and self.res[2] == "plugin_upd":
                 self.session.openWithCallback(self.answer_restart, MessageBox, self.res[1], MessageBox.TYPE_YESNO)
@@ -258,7 +293,7 @@ class BISSPro(Screen):
     def build_menu(self):
         icon_dir = os.path.join(PLUGIN_PATH, "icons/")
         menu_items = [
-            ("Add Key", "Manual BISS Entry (Hash Mode)", "add", icon_dir + "add.png"), 
+            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
             ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"), 
             ("Download Softcam", "Full update from server", "upd", icon_dir + "Download Softcam.png"), 
             ("Autoroll", "Smart search for current channel", "auto", icon_dir + "auto.png")
@@ -287,13 +322,47 @@ class BISSPro(Screen):
             elif act == "upd": self.action_update()
             elif act == "auto": self.action_auto()
 
+    def get_existing_key(self, ch_hash):
+        target = get_softcam_path()
+        if not os.path.exists(target): return ""
+        
+        alt_hash = ""
+        service = self.session.nav.getCurrentService()
+        if service:
+            info = service.info()
+            sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
+            vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
+            if vpid == 65535 or vpid == -1: vpid = 0
+            alt_hash = "%04X%04X" % (sid, vpid)
+
+        try:
+            with open(target, "r") as f:
+                content = f.readlines()
+                for line in content:
+                    if f"F {ch_hash.upper()}" in line.upper():
+                        parts = line.split()
+                        if len(parts) > 3: return parts[3][:16]
+                
+                if alt_hash:
+                    for line in content:
+                        if f"F {alt_hash.upper()}" in line.upper():
+                            parts = line.split()
+                            if len(parts) > 3: return parts[3][:16]
+        except: pass
+        return ""
+
     def action_add(self):
         service = self.session.nav.getCurrentService()
         if service: 
             ch_hash = getHash(self.session)
-            display_name = service.info().getName()
+            info = service.info()
+            if not ch_hash:
+                ch_hash = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
+            
+            existing_key = self.get_existing_key(ch_hash)
+            display_name = info.getName()
             if ch_hash: display_name += " (Hash: %s)" % ch_hash
-            self.session.openWithCallback(self.manual_done, HexInputScreen, display_name)
+            self.session.openWithCallback(self.manual_done, HexInputScreen, display_name, existing_key)
 
     def action_editor(self): self.session.open(BissManagerList)
 
@@ -307,7 +376,7 @@ class BISSPro(Screen):
             ch_hash = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
             
         if self.save_biss_key(ch_hash, key, info.getName()): 
-            self.res = (True, f"Saved Hash: {ch_hash}\nChannel: {info.getName()}")
+            self.res = (True, f"Key Saved in {self.save_mode} Mode\nChannel: {info.getName()}")
         else: 
             self.res = (False, "File Error")
         self.timer.start(100, True)
@@ -318,12 +387,29 @@ class BISSPro(Screen):
             current_date = time.strftime("%d/%m/%Y")
             target_dir = os.path.dirname(target)
             if not os.path.exists(target_dir): os.makedirs(target_dir)
+            
+            alt_hash = "00000000"
+            service = self.session.nav.getCurrentService()
+            if service:
+                info = service.info()
+                sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
+                vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
+                if vpid == 65535 or vpid == -1: vpid = 0
+                alt_hash = "%04X%04X" % (sid, vpid)
+
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
+                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
+                            lines.append(line)
+            
+            # الحفظ الدائم بناءً على الاختيار
+            if self.save_mode in ["smart", "dual"]:
+                lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
+            if self.save_mode in ["classic", "dual"]:
+                lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
+            
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
             restart_softcam_global(); return True
@@ -375,7 +461,6 @@ class BISSPro(Screen):
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
             try:
-                # محاولة البحث الوحيدة الآن هي عبر Google Sheet
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
                 response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(response):
@@ -386,20 +471,17 @@ class BISSPro(Screen):
                             sheet_freq = int(nums[0])
                             sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
-                                # --- إضافة فلتر الاسم الذكي ---
                                 if len(row) >= 3 and row[2].strip():
                                     sheet_name_filter = row[2].strip().upper()
                                     curr_ch_name = ch_name.upper()
                                     if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
-                                        continue # الاسم موجود في الجدول ولكنه لا يطابق القناة الحالية
-                                # ----------------------------
+                                        continue
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
                                     if self.save_biss_key(ch_hash, clean_key, ch_name):
-                                        self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}"); found = True; break
+                                        self.res = (True, f"Found: {clean_key}\nSaved in {self.save_mode} Mode"); found = True; break
             except: pass
             
-            # تم حذف منطق البحث في DATA_SOURCE (GitHub)
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
@@ -448,7 +530,6 @@ class BissProServiceWatcher:
             
             headers = {'User-Agent': 'Mozilla/5.0'}
             try:
-                # البحث في الخلفية يعتمد الآن فقط على Google Sheet
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
                 resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
@@ -458,13 +539,11 @@ class BissProServiceWatcher:
                         if len(nums) >= 2:
                             sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
-                                # --- إضافة فلتر الاسم الذكي في الخلفية ---
                                 if len(row) >= 3 and row[2].strip():
                                     sheet_name_filter = row[2].strip().upper()
                                     curr_ch_name = ch_name.upper()
                                     if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
                                         continue
-                                # ---------------------------------------
                                 clean = row[1].replace(" ", "").strip().upper()
                                 if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, ch_name); break
             except: pass
@@ -474,19 +553,56 @@ class BissProServiceWatcher:
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
+            # --- الإضافة الجديدة: قراءة الوضع المختار من الملف ---
+            current_mode = "dual" # الافتراضي
+            if os.path.exists(MODE_FILE):
+                try:
+                    with open(MODE_FILE, "r") as f:
+                        current_mode = f.read().strip().lower()
+                except: pass
+            # --------------------------------------------------
+
             current_date = time.strftime("%d/%m/%Y")
+            alt_hash = "00000000"
+            service = self.session.nav.getCurrentService()
+            if service:
+                info = service.info()
+                sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
+                vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
+                if vpid == 65535 or vpid == -1: vpid = 0
+                alt_hash = "%04X%04X" % (sid, vpid)
+
+            # فحص إذا كان السطر موجود بالفعل لتجنب التكرار
+            if os.path.exists(target):
+                with open(target, "r") as f:
+                    content = f.read().upper()
+                    # الفحص يعتمد الآن على الوضع المختار
+                    check_smart = f"F {full_id.upper()} 00000000 {key.upper()}" in content
+                    check_classic = f"F {alt_hash.upper()} 00000000 {key.upper()}" in content
+                    
+                    if current_mode == "smart" and check_smart: return False
+                    if current_mode == "classic" and check_classic: return False
+                    if current_mode == "dual" and check_smart and check_classic: return False
+
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
+                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
+                            lines.append(line)
+            
+            # --- تطبيق الاختيار حتى في الخلفية ---
+            if current_mode in ["smart", "dual"]:
+                lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
+            if current_mode in ["classic", "dual"]:
+                lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
+            
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
-            self.session.open(MessageBox, f"Key Found & Saved: {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
+            self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
             return True
         except: return False
-
+        
 class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -549,7 +665,7 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <eLabel text="OK: confirm  |  ◄ ► : move position  |  ▲ ▼ : letters position" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <eLabel text="OK: confirm  |  ◄ ► : move position right / left  |  ▲ ▼ : letters up / down" position=" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
@@ -609,7 +725,7 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="BISS Add & Autoroll", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
