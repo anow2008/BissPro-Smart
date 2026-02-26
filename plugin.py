@@ -2,18 +2,12 @@
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
-# --- تعديل التوافق مع التنبيهات للصور الحديثة والقديمة ---
-try:
-    from Tools.Notifications import addNotification
-except ImportError:
-    try:
-        from Screens.Notifications import Notifications
-        def addNotification(type, message, timeout=5, **kwargs):
-            Notifications.addNotification(type, message, timeout=timeout)
-    except:
-        def addNotification(*args, **kwargs):
-            pass
+
+# --- تم تبسيط التنبيهات لإلغاء المزعج منها والحفاظ على استقرار البلجن ---
+def addNotification(*args, **kwargs):
+    pass
 # --------------------------------------------------
+
 from Components.ActionMap import ActionMap
 from Components.MenuList import MenuList
 from Components.Label import Label
@@ -26,12 +20,11 @@ import os, re, shutil, time, random, csv
 import urllib.request
 from threading import Thread
 
-# --- إضافة مكتبات الهاش المدمجة ---
 from array import array
 import binascii
 
 # ==========================================================
-# إعدادات الهاش CRC32 (طريق الحفظ بالهاش)
+# إعدادات الهاش CRC32
 # ==========================================================
 crc32_table = array("L")
 for byte in range(256):
@@ -70,16 +63,16 @@ def getHash(session):
         return None
 
 # ==========================================================
-# الإعدادات والمسارات الأصلية
+# الإعدادات والمسارات
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.0" 
+VERSION_NUM = "v1.2-Smart" 
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
-DATA_SOURCE = "https://raw.githubusercontent.com/anow2008/softcam.key/main/biss"
 
+# تم حذف DATA_SOURCE (GitHub) والاعتماد فقط على Google Sheet
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
@@ -208,7 +201,7 @@ class BISSPro(Screen):
                         req_n = urllib.request.Request(URL_NOTES + "?nocache=" + str(random.randint(1000, 9999)), headers=headers)
                         notes = urllib.request.urlopen(req_n, timeout=5, context=ctx).read().decode("utf-8")
                     except:
-                        notes = "New update available with performance improvements."
+                        notes = "New update available."
                     
                     msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
                     self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
@@ -237,9 +230,9 @@ class BISSPro(Screen):
                     if os.path.exists(cp):
                         try: os.remove(cp)
                         except: pass
-                self.res = (True, "Plugin Updated Successfully!\nDo you want to restart Enigma2 now to apply changes?", "plugin_upd")
+                self.res = (True, "Plugin Updated Successfully!\nRestart Enigma2?", "plugin_upd")
             else:
-                self.res = (False, "Download incomplete. Please try again.")
+                self.res = (False, "Download incomplete.")
         except Exception as e: 
             self.res = (False, "Error: " + str(e))
         self.timer.start(100, True)
@@ -309,11 +302,8 @@ class BISSPro(Screen):
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        
-        # استخدام الهاش الجديد كأولوية
         ch_hash = getHash(self.session)
         if not ch_hash:
-            # طريقة احتياطية قديمة لو فشل الهاش
             ch_hash = ("%04X" % (info.getInfo(iServiceInformation.sSID) & 0xFFFF)) + ("%04X" % (info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF) if info.getInfo(iServiceInformation.sVideoPID) != -1 else "0000")
             
         if self.save_biss_key(ch_hash, key, info.getName()): 
@@ -333,7 +323,6 @@ class BISSPro(Screen):
                 with open(target, "r") as f:
                     for line in f:
                         if f"F {full_id.upper()}" not in line.upper(): lines.append(line)
-            # تم التعديل: كتابة الاسم والتاريخ فقط
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644)
@@ -377,7 +366,6 @@ class BISSPro(Screen):
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
-            # محاولة الحصول على الهاش أولاً للبحث المتقدم
             ch_hash = getHash(self.session)
             if not ch_hash:
                 raw_sid = info.getInfo(iServiceInformation.sSID)
@@ -387,6 +375,7 @@ class BISSPro(Screen):
             headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
             try:
+                # محاولة البحث الوحيدة الآن هي عبر Google Sheet
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
                 response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(response):
@@ -397,25 +386,20 @@ class BISSPro(Screen):
                             sheet_freq = int(nums[0])
                             sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                # --- إضافة فلتر الاسم الذكي ---
+                                if len(row) >= 3 and row[2].strip():
+                                    sheet_name_filter = row[2].strip().upper()
+                                    curr_ch_name = ch_name.upper()
+                                    if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
+                                        continue # الاسم موجود في الجدول ولكنه لا يطابق القناة الحالية
+                                # ----------------------------
                                 clean_key = row[1].replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    # --- التعديل هنا: استخدام ch_name بدلاً من row[2] ---
                                     if self.save_biss_key(ch_hash, clean_key, ch_name):
                                         self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}"); found = True; break
             except: pass
             
-            if not found:
-                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
-                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
-                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
-                m = re.search(pattern, raw_data, re.I)
-                if m:
-                    clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                    if len(clean_key) == 16:
-                        if self.save_biss_key(ch_hash, clean_key, ch_name):
-                            self.res = (True, f"Found: {clean_key}\nHash: {ch_hash}")
-                        else: self.res = (False, "Write Error")
-                        found = True
+            # تم حذف منطق البحث في DATA_SOURCE (GitHub)
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
         self.timer.start(100, True)
@@ -463,8 +447,8 @@ class BissProServiceWatcher:
                 ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
             headers = {'User-Agent': 'Mozilla/5.0'}
-            found = False
             try:
+                # البحث في الخلفية يعتمد الآن فقط على Google Sheet
                 req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
                 resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
                 for row in csv.reader(resp):
@@ -474,20 +458,19 @@ class BissProServiceWatcher:
                         if len(nums) >= 2:
                             sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
                             if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                # --- إضافة فلتر الاسم الذكي في الخلفية ---
+                                if len(row) >= 3 and row[2].strip():
+                                    sheet_name_filter = row[2].strip().upper()
+                                    curr_ch_name = ch_name.upper()
+                                    if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
+                                        continue
+                                # ---------------------------------------
                                 clean = row[1].replace(" ", "").strip().upper()
-                                # --- التعديل هنا أيضاً للبحث التلقائي في الخلفية ---
-                                if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, ch_name); found = True; break
+                                if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, ch_name); break
             except: pass
-            if not found:
-                req_d = urllib.request.Request(DATA_SOURCE, headers=headers)
-                raw_data = urllib.request.urlopen(req_d, timeout=12, context=ctx).read().decode("utf-8")
-                pattern = re.escape(str(curr_freq)) + r'[\s\S]{0,500}?(([0-9A-Fa-f]{2}[\s\t:=-]*){8})'
-                m = re.search(pattern, raw_data, re.I)
-                if m:
-                    clean_key = re.sub(r'[^0-9A-Fa-f]', '', m.group(1)).upper()
-                    if len(clean_key) == 16: self.save_biss_key_background(ch_hash, clean_key, ch_name)
         except: pass
         self.is_scanning = False
+
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
@@ -500,7 +483,7 @@ class BissProServiceWatcher:
             lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} | {current_date}\n")
             with open(target, "w") as f: f.writelines(lines)
             os.chmod(target, 0o644); restart_softcam_global()
-            addNotification(MessageBox, f"Found: {key}\nHash: {full_id}", type=MessageBox.TYPE_INFO, timeout=3)
+            self.session.open(MessageBox, f"Key Found & Saved: {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
             return True
         except: return False
 
@@ -566,7 +549,7 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <eLabel text="OK: confirm  |  ◀️ ▶️ : move position  |  ▲ ▼ : letters" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <eLabel text="OK: confirm  |  ◄ ► : move position  |  ▲ ▼ : letters position" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
@@ -626,9 +609,8 @@ class HexInputScreen(Screen):
 watcher_instance = None
 def main(session, **kwargs): session.open(BISSPro)
 def Plugins(**kwargs):
-    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.0", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
+    return [PluginDescriptor(name="BissPro Smart", description="Smart BISS Manager v1.2", icon="plugin.png", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main),
             PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart)]
 def sessionstart(reason, session=None, **kwargs):
     global watcher_instance
     if reason == 0 and session is not None and watcher_instance is None: watcher_instance = BissProServiceWatcher(session)
-
