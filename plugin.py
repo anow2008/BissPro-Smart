@@ -17,7 +17,7 @@ from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
-import os, re, shutil, time, random, csv
+import os, re, shutil, time, random, csv, json
 import urllib.request
 from threading import Thread
 from array import array
@@ -63,18 +63,22 @@ def getHash(session):
         return None
 
 # ==========================================================
-# الإعدادات والمسارات
+# الإعدادات والمسارات ودالة الحفظ الآمنة
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.1" 
-MODE_FILE = PLUGIN_PATH + "mode.txt" # ملف حفظ الوضع
+MODE_FILE = PLUGIN_PATH + "mode.txt"
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
 URL_NOTES   = "https://raw.githubusercontent.com/anow2008/info/main/notes"
 URL_PLUGIN  = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/plugin.py"
 
+FIREBASE_URL = "https://bisspro-dcfa5-default-rtdb.europe-west1.firebasedatabase.app/.json"
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
+
+# --- الرابط الجديد المضاف (JSON) ---
+NEW_JSON_URL = "https://script.google.com/macros/s/AKfycbwRfgMD6ReOMoNlXlNc0jSSjs2jB6Grg9l4Ucry-x7yJTMh74wFgiuBuE2-kFd4xirdYg/exec"
 
 def get_softcam_path():
     paths = [
@@ -88,6 +92,32 @@ def get_softcam_path():
     for p in paths:
         if os.path.exists(os.path.dirname(p)): return p
     return "/etc/tuxbox/config/SoftCam.Key"
+
+def safe_save_softcam(target, lines):
+    """دالة الحفظ الآمنة باستخدام ملف مؤقت لحماية الفلاشة"""
+    temp_file = target + ".tmp"
+    try:
+        target_dir = os.path.dirname(target)
+        if not os.path.exists(target_dir): os.makedirs(target_dir)
+        
+        with open(temp_file, "w") as f:
+            if isinstance(lines, list):
+                f.writelines(lines)
+            else:
+                f.write(lines)
+            f.flush()
+            os.fsync(f.fileno())
+            
+        if os.path.exists(temp_file):
+            if os.path.exists(target): os.remove(target)
+            os.rename(temp_file, target)
+            os.chmod(target, 0o644)
+            restart_softcam_global()
+            return True
+    except Exception as e:
+        print("[BissPro] Safe Save Error:", str(e))
+        if os.path.exists(temp_file): os.remove(temp_file)
+    return False
 
 def restart_softcam_global():
     scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
@@ -118,7 +148,6 @@ class BISSPro(Screen):
         Screen.__init__(self, session)
         self.res = (False, "")
         
-        # قراءة الوضع المحفوظ أو استخدام الافتراضي
         self.save_mode = "dual"
         if os.path.exists(MODE_FILE):
             try:
@@ -184,7 +213,6 @@ class BISSPro(Screen):
         self.update_clock()
 
     def open_settings(self):
-        # تم تعديل هذا الجزء من MessageBox TYPE_LIST إلى ChoiceBox لمنع الكراش
         options = [
             ("Dual Mode (Smart + Classic)", "dual"),
             ("Smart Hash Only", "smart"),
@@ -386,9 +414,6 @@ class BISSPro(Screen):
         target = get_softcam_path()
         try:
             current_date = time.strftime("%d/%m/%Y")
-            target_dir = os.path.dirname(target)
-            if not os.path.exists(target_dir): os.makedirs(target_dir)
-            
             alt_hash = "00000000"
             service = self.session.nav.getCurrentService()
             if service:
@@ -405,15 +430,12 @@ class BISSPro(Screen):
                         if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
                             lines.append(line)
             
-            # الحفظ الدائم بناءً على الاختيار
             if self.save_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
             if self.save_mode in ["classic", "dual"]:
                 lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
             
-            with open(target, "w") as f: f.writelines(lines)
-            os.chmod(target, 0o644)
-            restart_softcam_global(); return True
+            return safe_save_softcam(target, lines)
         except: return False
 
     def action_update(self): 
@@ -429,11 +451,14 @@ class BISSPro(Screen):
             req = urllib.request.Request("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", headers=headers)
             data = urllib.request.urlopen(req, context=ctx).read()
             target_path = get_softcam_path()
-            with open(target_path, "wb") as f: f.write(data)
-            os.chmod(target_path, 0o644)
+            
+            # --- تم إلغاء الحفظ الآمن هنا لحل مشكلة الفشل في الزر الأصفر ---
+            with open(target_path, "wb") as f:
+                f.write(data)
             restart_softcam_global()
             self.res = (True, "Softcam Updated Successfully")
-        except: self.res = (False, "Softcam Update Failed")
+        except Exception as e: 
+            self.res = (False, "Update Error: " + str(e))
         self.timer.start(100, True)
 
     def action_auto(self):
@@ -446,12 +471,14 @@ class BISSPro(Screen):
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName()
+            info = service.info(); ch_name = info.getName().upper().strip()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             freq_raw = t_data.get("frequency", 0)
             curr_freq = int(freq_raw / 1000 if freq_raw > 50000 else freq_raw)
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
+            
+            freq_search = "%s %s %s" % (curr_freq, curr_pol, curr_sr)
             
             ch_hash = getHash(self.session)
             if not ch_hash:
@@ -459,29 +486,77 @@ class BISSPro(Screen):
                 raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
                 ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
-            headers = {'User-Agent': 'Mozilla/5.0'}
             found = False
+            
             try:
-                req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
-                response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
-                for row in csv.reader(response):
-                    if len(row) >= 2:
-                        sheet_info = row[0].upper()
-                        nums = re.findall(r'\d+', sheet_info)
-                        if len(nums) >= 2:
-                            sheet_freq = int(nums[0])
-                            sheet_sr = int(nums[1])
-                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
-                                if len(row) >= 3 and row[2].strip():
-                                    sheet_name_filter = row[2].strip().upper()
-                                    curr_ch_name = ch_name.upper()
-                                    if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
-                                        continue
-                                clean_key = row[1].replace(" ", "").strip().upper()
+                # --- تطوير الربط الأساسي ليكون ذكياً (الأولوية للاسم والتردد معاً) ---
+                resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
+                db = json.loads(resp)
+                if db:
+                    # الخطوة 1: البحث الدقيق (تردد + اسم) - شرط "و" الذكي
+                    for db_key, db_val in db.items():
+                        db_key_up = db_key.upper()
+                        # يشترط وجود التردد واسم القناة معاً في المفتاح
+                        if str(curr_freq) in db_key_up and ch_name in db_key_up:
+                            clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
+                            if len(clean_key) == 16:
+                                if self.save_biss_key(ch_hash, clean_key, info.getName()):
+                                    self.res = (True, f"Found Exact: {clean_key}\nSaved for {info.getName()}")
+                                    found = True; break
+                    
+                    # الخطوة 2: البحث الاحتياطي (بالتردد فقط) كخيار ثانٍ إذا لم ينجح الأول
+                    if not found:
+                        for db_key, db_val in db.items():
+                            db_key_up = db_key.upper()
+                            if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
+                                clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
                                 if len(clean_key) == 16:
-                                    if self.save_biss_key(ch_hash, clean_key, ch_name):
-                                        self.res = (True, f"Found: {clean_key}\nSaved in {self.save_mode} Mode"); found = True; break
+                                    if self.save_biss_key(ch_hash, clean_key, info.getName()):
+                                        self.res = (True, f"Found by Freq: {clean_key}\nSaved for {info.getName()}")
+                                        found = True; break
             except: pass
+
+            # --- البحث في الرابط الجديد (NEW_JSON_URL) المضاف كخيار إضافي ---
+            if not found:
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    req_j = urllib.request.Request(NEW_JSON_URL, headers=headers)
+                    resp_j = urllib.request.urlopen(req_j, timeout=8, context=ctx).read().decode("utf-8")
+                    json_db = json.loads(resp_j)
+                    for item in json_db:
+                        # تحويل التردد في الملف للمقارنة
+                        raw_f = str(item.get("frequency", "")).upper()
+                        if str(curr_freq) in raw_f and curr_pol in raw_f:
+                            clean_key = item.get("key", "").replace(" ", "").strip().upper()
+                            if len(clean_key) == 16:
+                                if self.save_biss_key(ch_hash, clean_key, info.getName()):
+                                    self.res = (True, f"Found in New Link: {clean_key}\nSaved for {info.getName()}")
+                                    found = True; break
+                except: pass
+
+            if not found:
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                try:
+                    req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
+                    response = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
+                    for row in csv.reader(response):
+                        if len(row) >= 2:
+                            sheet_info = row[0].upper()
+                            nums = re.findall(r'\d+', sheet_info)
+                            if len(nums) >= 2:
+                                sheet_freq = int(nums[0])
+                                sheet_sr = int(nums[1])
+                                if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                    if len(row) >= 3 and row[2].strip():
+                                        sheet_name_filter = row[2].strip().upper()
+                                        curr_ch_name = info.getName().upper()
+                                        if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
+                                            continue
+                                    clean_key = row[1].replace(" ", "").strip().upper()
+                                    if len(clean_key) == 16:
+                                        if self.save_biss_key(ch_hash, clean_key, info.getName()):
+                                            self.res = (True, f"Found: {clean_key}\nSaved in {self.save_mode} Mode"); found = True; break
+                except: pass
             
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
         except: self.res = (False, "Auto Error")
@@ -515,7 +590,7 @@ class BissProServiceWatcher:
         try:
             import ssl
             ctx = ssl._create_unverified_context()
-            info = service.info(); ch_name = info.getName()
+            info = service.info(); ch_name = info.getName().upper().strip()
             t_data = info.getInfoObject(iServiceInformation.sTransponderData)
             if not t_data: self.is_scanning = False; return
             freq_raw = t_data.get("frequency", 0)
@@ -523,45 +598,89 @@ class BissProServiceWatcher:
             curr_pol = "V" if t_data.get("polarization", 0) else "H"
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
+            freq_search = "%s %s %s" % (curr_freq, curr_pol, curr_sr)
+            
             ch_hash = getHash(self.session)
             if not ch_hash:
                 raw_sid = info.getInfo(iServiceInformation.sSID)
                 raw_vpid = info.getInfo(iServiceInformation.sVideoPID)
                 ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
-            headers = {'User-Agent': 'Mozilla/5.0'}
+            found = False
+            
             try:
-                req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
-                resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
-                for row in csv.reader(resp):
-                    if len(row) >= 2:
-                        sheet_info = row[0].upper()
-                        nums = re.findall(r'\d+', sheet_info)
-                        if len(nums) >= 2:
-                            sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
-                            if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
-                                if len(row) >= 3 and row[2].strip():
-                                    sheet_name_filter = row[2].strip().upper()
-                                    curr_ch_name = ch_name.upper()
-                                    if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
-                                        continue
-                                clean = row[1].replace(" ", "").strip().upper()
-                                if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, ch_name); break
+                # --- تطوير الربط في الخلفية (شرط التردد واسم القناة معاً) ---
+                resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
+                db = json.loads(resp)
+                if db:
+                    # الخطوة 1: تطابق تام (الاسم والتردد)
+                    for db_key, db_val in db.items():
+                        db_key_up = db_key.upper()
+                        if str(curr_freq) in db_key_up and ch_name in db_key_up:
+                            clean = db_val.replace(" ", "").replace(":", "").strip().upper()
+                            if len(clean) == 16: 
+                                self.save_biss_key_background(ch_hash, clean, info.getName())
+                                found = True; break
+                    
+                    # الخطوة 2: البحث بالتردد إذا لم ينجح الأول
+                    if not found:
+                        for db_key, db_val in db.items():
+                            db_key_up = db_key.upper()
+                            if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
+                                clean = db_val.replace(" ", "").replace(":", "").strip().upper()
+                                if len(clean) == 16: 
+                                    self.save_biss_key_background(ch_hash, clean, info.getName())
+                                    found = True; break
             except: pass
+
+            # --- البحث في الخلفية داخل الرابط الجديد المضاف (JSON) ---
+            if not found:
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    req_j = urllib.request.Request(NEW_JSON_URL, headers=headers)
+                    resp_j = urllib.request.urlopen(req_j, timeout=8, context=ctx).read().decode("utf-8")
+                    json_db = json.loads(resp_j)
+                    for item in json_db:
+                        raw_f = str(item.get("frequency", "")).upper()
+                        if str(curr_freq) in raw_f and curr_pol in raw_f:
+                            clean = item.get("key", "").replace(" ", "").strip().upper()
+                            if len(clean) == 16:
+                                self.save_biss_key_background(ch_hash, clean, info.getName())
+                                found = True; break
+                except: pass
+
+            if not found:
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                try:
+                    req_s = urllib.request.Request(GOOGLE_SHEET_URL, headers=headers)
+                    resp = urllib.request.urlopen(req_s, timeout=8, context=ctx).read().decode("utf-8").splitlines()
+                    for row in csv.reader(resp):
+                        if len(row) >= 2:
+                            sheet_info = row[0].upper()
+                            nums = re.findall(r'\d+', sheet_info)
+                            if len(nums) >= 2:
+                                sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
+                                if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
+                                    if len(row) >= 3 and row[2].strip():
+                                        sheet_name_filter = row[2].strip().upper()
+                                        curr_ch_name = ch_name.upper()
+                                        if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
+                                            continue
+                                    clean = row[1].replace(" ", "").strip().upper()
+                                    if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, info.getName()); break
+                except: pass
         except: pass
         self.is_scanning = False
 
     def save_biss_key_background(self, full_id, key, name):
         target = get_softcam_path()
         try:
-            # --- الإضافة الجديدة: قراءة الوضع المختار من الملف ---
-            current_mode = "dual" # الافتراضي
+            current_mode = "dual"
             if os.path.exists(MODE_FILE):
                 try:
                     with open(MODE_FILE, "r") as f:
                         current_mode = f.read().strip().lower()
                 except: pass
-            # --------------------------------------------------
 
             current_date = time.strftime("%d/%m/%Y")
             alt_hash = "00000000"
@@ -573,11 +692,9 @@ class BissProServiceWatcher:
                 if vpid == 65535 or vpid == -1: vpid = 0
                 alt_hash = "%04X%04X" % (sid, vpid)
 
-            # فحص إذا كان السطر موجود بالفعل لتجنب التكرار
             if os.path.exists(target):
                 with open(target, "r") as f:
                     content = f.read().upper()
-                    # الفحص يعتمد الآن على الوضع المختار
                     check_smart = f"F {full_id.upper()} 00000000 {key.upper()}" in content
                     check_classic = f"F {alt_hash.upper()} 00000000 {key.upper()}" in content
                     
@@ -592,16 +709,14 @@ class BissProServiceWatcher:
                         if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
                             lines.append(line)
             
-            # --- تطبيق الاختيار حتى في الخلفية ---
             if current_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
             if current_mode in ["classic", "dual"]:
                 lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
             
-            with open(target, "w") as f: f.writelines(lines)
-            os.chmod(target, 0o644); restart_softcam_global()
-            self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
-            return True
+            if safe_save_softcam(target, lines):
+                self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
+                return True
         except: return False
         
 class BissManagerList(Screen):
@@ -637,11 +752,11 @@ class BissManagerList(Screen):
         path = get_softcam_path(); parts = self.old_line.split(); parts[3] = str(new_key).upper(); new_line = " ".join(parts)
         try:
             with open(path, "r") as f: lines = f.readlines()
-            with open(path, "w") as f:
-                for line in lines:
-                    if line.strip() == self.old_line.strip(): f.write(new_line + "\n")
-                    else: f.write(line)
-            self.load_keys(); restart_softcam_global()
+            new_list = []
+            for line in lines:
+                if line.strip() == self.old_line.strip(): new_list.append(new_line + "\n")
+                else: new_list.append(line)
+            if safe_save_softcam(path, new_list): self.load_keys()
         except: pass
     def delete_confirm(self):
         current = self["keylist"].getCurrent()
@@ -651,10 +766,10 @@ class BissManagerList(Screen):
             current = self["keylist"].getCurrent(); path = get_softcam_path()
             try:
                 with open(path, "r") as f: lines = f.readlines()
-                with open(path, "w") as f:
-                    for line in lines:
-                        if line.strip() != current.strip(): f.write(line)
-                self.load_keys(); restart_softcam_global()
+                new_list = []
+                for line in lines:
+                    if line.strip() != current.strip(): new_list.append(line)
+                if safe_save_softcam(path, new_list): self.load_keys()
             except: pass
 
 class HexInputScreen(Screen):
@@ -666,7 +781,7 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <eLabel text="OK: confirm  |  ◄ ► : move position right / left  |  ▲ ▼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <eLabel text="OK: confirm  |  ◄ ► : move  left / right  |  ▲ ▼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
