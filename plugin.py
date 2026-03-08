@@ -66,7 +66,7 @@ def getHash(session):
 # الإعدادات والمسارات ودالة الحفظ الآمنة
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
-VERSION_NUM = "v1.1" 
+VERSION_NUM = "v1.0" 
 MODE_FILE = PLUGIN_PATH + "mode.txt"
 
 URL_VERSION = "https://raw.githubusercontent.com/anow2008/BissPro-Smart/main/version"
