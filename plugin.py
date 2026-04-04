@@ -851,7 +851,9 @@ class HexInputScreen(Screen):
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
         char_col = ""
-        for i, c in enumerate(self.chars): char_col += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
+        for i, c in enumerate(self.chars): 
+            # تم تعديل السطر التالي لإلغاء أكواد الألوان اليدوية لضمان الظهور على OpenPLi 9.2
+            char_col += ("[%s]\n" if i == self.char_index else " %s \n") % c
         self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
