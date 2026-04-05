@@ -77,9 +77,11 @@ FIREBASE_URL = "https://bisspro-dcfa5-default-rtdb.europe-west1.firebasedatabase
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
-# --- تم التعديل للقراءة من ملف all.json الموحد ---
+# --- روابط GitHub الخاصة بك (الأولوية الأولى) ---
 GITHUB_SOURCES = [
-    "https://raw.githubusercontent.com/anow2008/biss/main/all.json"
+    "https://raw.githubusercontent.com/anow2008/biss/main/keys.json",
+    "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/bisskeys.json",
+    "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/feeds.json"
 ]
 
 # --- الرابط القديم المضاف (JSON) ---
@@ -490,7 +492,7 @@ class BISSPro(Screen):
             
             found = False
             
-            # --- المحطة الأولى: البحث في روابط GitHub (تم تعديلها لـ all.json) ---
+            # --- المحطة الأولى: البحث في روابط GitHub الخاصة بك (الأسرع والأدق) ---
             for url in GITHUB_SOURCES:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -499,15 +501,9 @@ class BISSPro(Screen):
                     data_g = json.loads(resp_g)
                     for entry in data_g:
                         json_freq = str(entry.get("frequency", "")).split()[0]
-                        # تم تعديل البحث ليقبل id أو name
-                        json_id = str(entry.get("id", entry.get("name", ""))).strip().upper()
-                        # سحب Symbol Rate للمقارنة بالمرونة المطلوبة
-                        try:
-                            json_sr = int(re.findall(r'\d+', str(entry.get("frequency", "")))[1])
-                        except: json_sr = curr_sr
-
-                        # شرط التردد + مرونة الـ Symbol Rate (فرق حتى 10) + مطابقة الاسم
-                        if json_freq in str(curr_freq) and abs(json_sr - curr_sr) <= 10:
+                        json_id = entry.get("id", "").strip().upper()
+                        # شرط التردد + مطابقة الاسم لضمان عدم الخلط بين الفيدات
+                        if json_freq in str(curr_freq):
                             if json_id in ch_name or ch_name in json_id:
                                 clean_key = entry.get("key", "").replace(" ", "").strip().upper()
                                 if len(clean_key) == 16:
@@ -629,7 +625,7 @@ class BissProServiceWatcher:
             
             found = False
             
-            # --- البحث التلقائي في الخلفية (تم تعديلها لـ all.json) ---
+            # --- البحث التلقائي في الخلفية (GitHub أولاً) ---
             for url in GITHUB_SOURCES:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -638,13 +634,8 @@ class BissProServiceWatcher:
                     data_g = json.loads(resp_g)
                     for entry in data_g:
                         json_freq = str(entry.get("frequency", "")).split()[0]
-                        # تم تعديل البحث ليقبل id أو name
-                        json_id = str(entry.get("id", entry.get("name", ""))).strip().upper()
-                        try:
-                            json_sr = int(re.findall(r'\d+', str(entry.get("frequency", "")))[1])
-                        except: json_sr = curr_sr
-
-                        if json_freq in str(curr_freq) and abs(json_sr - curr_sr) <= 10:
+                        json_id = entry.get("id", "").strip().upper()
+                        if json_freq in str(curr_freq):
                             if json_id in ch_name or ch_name in json_id:
                                 clean = entry.get("key", "").replace(" ", "").strip().upper()
                                 if len(clean) == 16:
@@ -861,6 +852,7 @@ class HexInputScreen(Screen):
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
         char_col = ""
         for i, c in enumerate(self.chars): 
+            # تم تعديل السطر التالي لإلغاء أكواد الألوان اليدوية لضمان الظهور على OpenPLi 9.2
             char_col += ("[%s]\n" if i == self.char_index else " %s \n") % c
         self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
