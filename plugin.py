@@ -79,8 +79,6 @@ GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv"
 
 # --- روابط GitHub الخاصة بك (الأولوية الأولى) ---
 GITHUB_SOURCES = [
-    "https://raw.githubusercontent.com/anow2008/biss/main/all.json",
-    "https://raw.githubusercontent.com/anow2008/biss/main/keys.json",
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/bisskeys.json",
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/feeds.json"
 ]
