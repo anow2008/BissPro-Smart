@@ -596,12 +596,15 @@ class BissProServiceWatcher:
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
+        # --- تعديل: التأكد أن القناة مشفرة بنظام BISS CAID 0x2600 حصراً ---
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
                 for caid in caids:
-                    if caid == 0x2600: is_biss = True; break
+                    if caid == 0x2600:
+                        is_biss = True
+                        break
             if is_biss:
                 self.is_scanning = True
                 Thread(target=self.bg_do_auto, args=(service,)).start()
