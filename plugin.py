@@ -118,7 +118,7 @@ def safe_save_softcam(target, lines):
             if os.path.exists(target): os.remove(target)
             os.rename(temp_file, target)
             os.chmod(target, 0o644)
-            restart_softcam_global()
+            restart_softcam_global() # استدعاء الريستارت المطور
             return True
     except Exception as e:
         print("[BissPro] Safe Save Error:", str(e))
@@ -126,20 +126,35 @@ def safe_save_softcam(target, lines):
     return False
 
 def restart_softcam_global():
+    # --- دالة الريستارت القوية: تنظيف وإعادة تشغيل ---
     scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
+    # 1. محاولة الإيقاف أولاً لتفريغ الـ PID
+    for s in scripts:
+        if os.path.exists(s):
+            os.system(f"{s} stop >/dev/null 2>&1")
+    
+    # 2. التأكد من قتل أي عملية عالقة
+    os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
+    time.sleep(0.5)
+    
+    # 3. تنظيف ملفات الكاش المؤقتة (تمنع التعليق في بعض الصور)
+    for p in ["/tmp/.emu.info", "/tmp/ecm.info", "/tmp/oscam.mem"]:
+        if os.path.exists(p):
+            try: os.remove(p)
+            except: pass
+
+    # 4. إعادة التشغيل
     restarted = False
     for s in scripts:
         if os.path.exists(s):
-            os.system(f"{s} restart >/dev/null 2>&1")
+            os.system(f"{s} start >/dev/null 2>&1")
             restarted = True
             break
+    
+    # إذا لم يوجد سكريبت، نشغل المحاكي مباشرة من المسار الافتراضي (لصور معينة)
     if not restarted:
-        os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
-        time.sleep(1.0)
-        for s in scripts:
-            if os.path.exists(s):
-                os.system(f"{s} start >/dev/null 2>&1")
-                break
+        if os.path.exists("/usr/bin/oscam"): os.system("/usr/bin/oscam -b &")
+        elif os.path.exists("/usr/bin/ncam"): os.system("/usr/bin/ncam -b &")
 
 class AutoScale:
     def __init__(self):
@@ -492,7 +507,7 @@ class BISSPro(Screen):
             
             found = False
             
-            # --- المحطة الأولى: البحث في كل روابط JSON على GitHub (الأولوية القصوى) ---
+            # --- البحث في GitHub ---
             for url in GITHUB_SOURCES:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -512,7 +527,7 @@ class BISSPro(Screen):
                     if found: break
                 except: pass
 
-            # --- المحطة الثانية: البحث في ملف JSON جوجل (إذا لم يجد في GitHub) ---
+            # --- البحث في Google JSON ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -529,7 +544,7 @@ class BISSPro(Screen):
                                     found = True; break
                 except: pass
 
-            # --- المحطة الثالثة: البحث في Firebase ---
+            # --- البحث في Firebase ---
             if not found:
                 try:
                     resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
@@ -554,7 +569,7 @@ class BISSPro(Screen):
                                             found = True; break
                 except: pass
 
-            # --- المحطة الأخيرة: البحث في Google Sheets ---
+            # --- البحث في Google Sheets ---
             if not found:
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 try:
@@ -597,7 +612,6 @@ class BissProServiceWatcher:
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # --- تعديل: التأكد أن القناة مشفرة بنظام BISS CAID 0x2600 حصراً ---
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
@@ -629,8 +643,6 @@ class BissProServiceWatcher:
                 ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
             found = False
-            
-            # --- البحث التلقائي في الخلفية (GitHub أولاً) ---
             for url in GITHUB_SOURCES:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -649,7 +661,6 @@ class BissProServiceWatcher:
                     if found: break
                 except: pass
 
-            # --- البحث التلقائي في Google JSON ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -677,14 +688,6 @@ class BissProServiceWatcher:
                                 if len(clean) == 16: 
                                     self.save_biss_key_background(ch_hash, clean, info.getName())
                                     found = True; break
-                        if not found:
-                            for db_key, db_val in db.items():
-                                db_key_up = db_key.upper()
-                                if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
-                                    clean = db_val.replace(" ", "").replace(":", "").strip().upper()
-                                    if len(clean) == 16: 
-                                        self.save_biss_key_background(ch_hash, clean, info.getName())
-                                        found = True; break
                 except: pass
 
             if not found:
