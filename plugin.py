@@ -22,6 +22,7 @@ import urllib.request
 from threading import Thread
 from array import array
 import binascii
+import glob
 
 # ==========================================================
 # إعدادات الهاش CRC32
@@ -153,8 +154,12 @@ def restart_softcam_global():
     
     # إذا لم يوجد سكريبت، نشغل المحاكي مباشرة من المسار الافتراضي (لصور معينة)
     if not restarted:
-        if os.path.exists("/usr/bin/oscam"): os.system("/usr/bin/oscam -b &")
-        elif os.path.exists("/usr/bin/ncam"): os.system("/usr/bin/ncam -b &")
+        oscam_list = glob.glob("/usr/bin/oscam*")
+        ncam_list = glob.glob("/usr/bin/ncam*")
+        if oscam_list:
+            os.system(f"{oscam_list[0]} -b &")
+        elif ncam_list:
+            os.system(f"{ncam_list[0]} -b &")
 
 class AutoScale:
     def __init__(self):
@@ -688,6 +693,14 @@ class BissProServiceWatcher:
                                 if len(clean) == 16: 
                                     self.save_biss_key_background(ch_hash, clean, info.getName())
                                     found = True; break
+                        if not found:
+                            for db_key, db_val in db.items():
+                                db_key_up = db_key.upper()
+                                if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
+                                    clean = db_val.replace(" ", "").replace(":", "").strip().upper()
+                                    if len(clean) == 16: 
+                                        self.save_biss_key_background(ch_hash, clean, info.getName())
+                                        found = True; break
                 except: pass
 
             if not found:
