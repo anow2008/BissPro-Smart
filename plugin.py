@@ -22,7 +22,6 @@ import urllib.request
 from threading import Thread
 from array import array
 import binascii
-import glob
 
 # ==========================================================
 # إعدادات الهاش CRC32
@@ -119,7 +118,7 @@ def safe_save_softcam(target, lines):
             if os.path.exists(target): os.remove(target)
             os.rename(temp_file, target)
             os.chmod(target, 0o644)
-            restart_softcam_global() # استدعاء الريستارت المطور
+            restart_softcam_global()
             return True
     except Exception as e:
         print("[BissPro] Safe Save Error:", str(e))
@@ -127,39 +126,20 @@ def safe_save_softcam(target, lines):
     return False
 
 def restart_softcam_global():
-    # --- دالة الريستارت القوية: تنظيف وإعادة تشغيل ---
     scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
-    # 1. محاولة الإيقاف أولاً لتفريغ الـ PID
-    for s in scripts:
-        if os.path.exists(s):
-            os.system(f"{s} stop >/dev/null 2>&1")
-    
-    # 2. التأكد من قتل أي عملية عالقة
-    os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
-    time.sleep(0.5)
-    
-    # 3. تنظيف ملفات الكاش المؤقتة (تمنع التعليق في بعض الصور)
-    for p in ["/tmp/.emu.info", "/tmp/ecm.info", "/tmp/oscam.mem"]:
-        if os.path.exists(p):
-            try: os.remove(p)
-            except: pass
-
-    # 4. إعادة التشغيل
     restarted = False
     for s in scripts:
         if os.path.exists(s):
-            os.system(f"{s} start >/dev/null 2>&1")
+            os.system(f"{s} restart >/dev/null 2>&1")
             restarted = True
             break
-    
-    # إذا لم يوجد سكريبت، نشغل المحاكي مباشرة من المسار الافتراضي (لصور معينة)
     if not restarted:
-        oscam_list = glob.glob("/usr/bin/oscam*")
-        ncam_list = glob.glob("/usr/bin/ncam*")
-        if oscam_list:
-            os.system(f"{oscam_list[0]} -b &")
-        elif ncam_list:
-            os.system(f"{ncam_list[0]} -b &")
+        os.system("killall -9 oscam ncam vicardd gbox 2>/dev/null")
+        time.sleep(1.0)
+        for s in scripts:
+            if os.path.exists(s):
+                os.system(f"{s} start >/dev/null 2>&1")
+                break
 
 class AutoScale:
     def __init__(self):
@@ -453,8 +433,11 @@ class BISSPro(Screen):
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
-                            lines.append(line)
+                        # منع التكرار: تنظيف الأسطر القديمة التي تبدأ بنفس الـ Hash أو الـ Alt_Hash تماماً
+                        up_line = line.upper().strip()
+                        if up_line.startswith(f"F {full_id.upper()}") or up_line.startswith(f"F {alt_hash.upper()}"):
+                            continue
+                        lines.append(line)
             
             if self.save_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
@@ -512,7 +495,7 @@ class BISSPro(Screen):
             
             found = False
             
-            # --- البحث في GitHub ---
+            # --- المحطة الأولى: البحث في كل روابط JSON على GitHub (الأولوية القصوى) ---
             for url in GITHUB_SOURCES:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -532,7 +515,7 @@ class BISSPro(Screen):
                     if found: break
                 except: pass
 
-            # --- البحث في Google JSON ---
+            # --- المحطة الثانية: البحث في ملف JSON جوجل (إذا لم يجد في GitHub) ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -549,7 +532,7 @@ class BISSPro(Screen):
                                     found = True; break
                 except: pass
 
-            # --- البحث في Firebase ---
+            # --- المحطة الثالثة: البحث في Firebase ---
             if not found:
                 try:
                     resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
@@ -574,7 +557,7 @@ class BISSPro(Screen):
                                             found = True; break
                 except: pass
 
-            # --- البحث في Google Sheets ---
+            # --- المحطة الأخيرة: البحث في Google Sheets ---
             if not found:
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 try:
@@ -617,6 +600,7 @@ class BissProServiceWatcher:
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
+        # --- التأكد أن القناة مشفرة بنظام BISS CAID 0x2600 حصراً ---
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
@@ -648,6 +632,8 @@ class BissProServiceWatcher:
                 ch_hash = ("%04X" % (raw_sid & 0xFFFF)) + ("%04X" % (raw_vpid & 0xFFFF) if raw_vpid != -1 else "0000")
             
             found = False
+            
+            # --- البحث التلقائي في الخلفية (GitHub أولاً) ---
             for url in GITHUB_SOURCES:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -661,11 +647,12 @@ class BissProServiceWatcher:
                             if json_id in ch_name or ch_name in json_id:
                                 clean = entry.get("key", "").replace(" ", "").strip().upper()
                                 if len(clean) == 16:
-                                    self.save_biss_key_background(ch_hash, clean, info.getName())
-                                    found = True; break
+                                    if self.save_biss_key_background(ch_hash, clean, info.getName()):
+                                        found = True; break
                     if found: break
                 except: pass
 
+            # --- البحث التلقائي في Google JSON ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -677,7 +664,7 @@ class BissProServiceWatcher:
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
                             clean = item.get("key", "").replace(" ", "").strip().upper()
                             if len(clean) == 16:
-                                self.save_biss_key_background(ch_hash, clean, info.getName())
+                                kib = self.save_biss_key_background(ch_hash, clean, info.getName())
                                 found = True; break
                 except: pass
 
@@ -691,16 +678,16 @@ class BissProServiceWatcher:
                             if str(curr_freq) in db_key_up and ch_name in db_key_up:
                                 clean = db_val.replace(" ", "").replace(":", "").strip().upper()
                                 if len(clean) == 16: 
-                                    self.save_biss_key_background(ch_hash, clean, info.getName())
-                                    found = True; break
+                                    if self.save_biss_key_background(ch_hash, clean, info.getName()):
+                                        found = True; break
                         if not found:
                             for db_key, db_val in db.items():
                                 db_key_up = db_key.upper()
                                 if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
                                     clean = db_val.replace(" ", "").replace(":", "").strip().upper()
                                     if len(clean) == 16: 
-                                        self.save_biss_key_background(ch_hash, clean, info.getName())
-                                        found = True; break
+                                        if self.save_biss_key_background(ch_hash, clean, info.getName()):
+                                            found = True; break
                 except: pass
 
             if not found:
@@ -721,7 +708,9 @@ class BissProServiceWatcher:
                                         if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
                                             continue
                                     clean = row[1].replace(" ", "").strip().upper()
-                                    if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, info.getName()); break
+                                    if len(clean) == 16: 
+                                        if self.save_biss_key_background(ch_hash, clean, info.getName()):
+                                            break
                 except: pass
         except: pass
         self.is_scanning = False
@@ -744,6 +733,8 @@ class BissProServiceWatcher:
                 vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
                 if vpid == 65535 or vpid == -1: vpid = 0
                 alt_hash = "%04X%04X" % (sid, vpid)
+
+            # التحقق الذكي لمنع التكرار التام: لو الـ ID والشفرة متطابقين بالفعل في الملف لا داعي للكتابة مجدداً
             if os.path.exists(target):
                 with open(target, "r") as f:
                     content = f.read().upper()
@@ -752,16 +743,22 @@ class BissProServiceWatcher:
                     if current_mode == "smart" and check_smart: return False
                     if current_mode == "classic" and check_classic: return False
                     if current_mode == "dual" and check_smart and check_classic: return False
+
+            # قراءة وتنظيف الملف من أي سطر قديم يحمل نفس الـ Hash أو Alt Hash (تحديث الشفرة فقط ومنع التكرار)
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
-                            lines.append(line)
+                        up_line = line.upper().strip()
+                        if up_line.startswith(f"F {full_id.upper()}") or up_line.startswith(f"F {alt_hash.upper()}"):
+                            continue
+                        lines.append(line)
+
             if current_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
             if current_mode in ["classic", "dual"]:
                 lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
+
             if safe_save_softcam(target, lines):
                 self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
                 return True
