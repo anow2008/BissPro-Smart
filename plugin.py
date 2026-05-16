@@ -77,15 +77,15 @@ FIREBASE_URL = "https://bisspro-dcfa5-default-rtdb.europe-west1.firebasedatabase
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
-# --- روابط GitHub الخاصة بك (الأولوية الأولى) ---
+# --- الرابط الجديد المضاف (JSON) ---
+NEW_JSON_URL = "https://script.google.com/macros/s/AKfycbwRfgMD6ReOMoNlXlNc0jSSjs2jB6Grg9l4Ucry-x7yJTMh74wFgiuBuE2-kFd4xirdYg/exec"
+
+# --- الروابط الإضافية المطلوبة من الجيت هاب ---
 GITHUB_SOURCES = [
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/bisskeys.json",
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/feeds.json",
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/for%20me.json"
 ]
-
-# --- رابط Google JSON المضاف (الأولوية الثانية) ---
-NEW_JSON_URL = "https://script.google.com/macros/s/AKfycbwRfgMD6ReOMoNlXlNc0jSSjs2jB6Grg9l4Ucry-x7yJTMh74wFgiuBuE2-kFd4xirdYg/exec"
 
 def get_softcam_path():
     paths = [
@@ -101,6 +101,7 @@ def get_softcam_path():
     return "/etc/tuxbox/config/SoftCam.Key"
 
 def safe_save_softcam(target, lines):
+    """دالة الحفظ الآمنة باستخدام ملف مؤقت لحماية الفلاشة"""
     temp_file = target + ".tmp"
     try:
         target_dir = os.path.dirname(target)
@@ -433,11 +434,8 @@ class BISSPro(Screen):
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        # منع التكرار: تنظيف الأسطر القديمة التي تبدأ بنفس الـ Hash أو الـ Alt_Hash تماماً
-                        up_line = line.upper().strip()
-                        if up_line.startswith(f"F {full_id.upper()}") or up_line.startswith(f"F {alt_hash.upper()}"):
-                            continue
-                        lines.append(line)
+                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
+                            lines.append(line)
             
             if self.save_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
@@ -460,6 +458,8 @@ class BISSPro(Screen):
             req = urllib.request.Request("https://raw.githubusercontent.com/anow2008/softcam.key/main/softcam.key", headers=headers)
             data = urllib.request.urlopen(req, context=ctx).read()
             target_path = get_softcam_path()
+            
+            # --- تم إلغاء الحفظ الآمن هنا لحل مشكلة الفشل في الزر الأصفر ---
             with open(target_path, "wb") as f:
                 f.write(data)
             restart_softcam_global()
@@ -495,27 +495,55 @@ class BISSPro(Screen):
             
             found = False
             
-            # --- المحطة الأولى: البحث في كل روابط JSON على GitHub (الأولوية القصوى) ---
-            for url in GITHUB_SOURCES:
-                try:
-                    headers = {'User-Agent': 'Mozilla/5.0'}
-                    req_g = urllib.request.Request(url, headers=headers)
-                    resp_g = urllib.request.urlopen(req_g, timeout=7, context=ctx).read().decode("utf-8")
-                    data_g = json.loads(resp_g)
-                    for entry in data_g:
-                        json_freq = str(entry.get("frequency", "")).split()[0]
-                        json_id = entry.get("id", "").strip().upper()
-                        if json_freq in str(curr_freq):
-                            if json_id in ch_name or ch_name in json_id:
-                                clean_key = entry.get("key", "").replace(" ", "").strip().upper()
+            try:
+                # --- تطوير الربط الأساسي ليكون ذكياً (الأولوية للاسم والتردد معاً) ---
+                resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
+                db = json.loads(resp)
+                if db:
+                    # الخطوة 1: البحث الدقيق (تردد + اسم) - شرط "و" الذكي
+                    for db_key, db_val in db.items():
+                        db_key_up = db_key.upper()
+                        # يشترط وجود التردد واسم القناة معاً في المفتاح
+                        if str(curr_freq) in db_key_up and ch_name in db_key_up:
+                            clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
+                            if len(clean_key) == 16:
+                                if self.save_biss_key(ch_hash, clean_key, info.getName()):
+                                    self.res = (True, f"Found Exact: {clean_key}\nSaved for {info.getName()}")
+                                    found = True; break
+                    
+                    # الخطوة 2: البحث الاحتياطي (بالتردد فقط) كخيار ثانٍ إذا لم ينجح الأول
+                    if not found:
+                        for db_key, db_val in db.items():
+                            db_key_up = db_key.upper()
+                            if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
+                                clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
                                 if len(clean_key) == 16:
                                     if self.save_biss_key(ch_hash, clean_key, info.getName()):
-                                        self.res = (True, f"Found on GitHub: {clean_key}\nSaved for {info.getName()}")
+                                        self.res = (True, f"Found by Freq: {clean_key}\nSaved for {info.getName()}")
                                         found = True; break
-                    if found: break
-                except: pass
+            except: pass
 
-            # --- المحطة الثانية: البحث في ملف JSON جوجل (إذا لم يجد في GitHub) ---
+            # --- البحث في روابط GITHUB_SOURCES المضافة ---
+            if not found:
+                for g_url in GITHUB_SOURCES:
+                    try:
+                        headers = {'User-Agent': 'Mozilla/5.0'}
+                        req_g = urllib.request.Request(g_url, headers=headers)
+                        resp_g = urllib.request.urlopen(req_g, timeout=8, context=ctx).read().decode("utf-8")
+                        json_g = json.loads(resp_g)
+                        if isinstance(json_g, list):
+                            for item in json_g:
+                                raw_f = str(item.get("frequency", "")).upper()
+                                if str(curr_freq) in raw_f and curr_pol in raw_f:
+                                    clean_key = item.get("key", "").replace(" ", "").strip().upper()
+                                    if len(clean_key) == 16:
+                                        if self.save_biss_key(ch_hash, clean_key, info.getName()):
+                                            self.res = (True, f"Found in GitHub Link: {clean_key}\nSaved for {info.getName()}")
+                                            found = True; break
+                        if found: break
+                    except: pass
+
+            # --- البحث في الرابط الجديد (NEW_JSON_URL) المضاف كخيار إضافي ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -523,41 +551,16 @@ class BISSPro(Screen):
                     resp_j = urllib.request.urlopen(req_j, timeout=8, context=ctx).read().decode("utf-8")
                     json_db = json.loads(resp_j)
                     for item in json_db:
+                        # تحويل التردد في الملف للمقارنة
                         raw_f = str(item.get("frequency", "")).upper()
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
                             clean_key = item.get("key", "").replace(" ", "").strip().upper()
                             if len(clean_key) == 16:
                                 if self.save_biss_key(ch_hash, clean_key, info.getName()):
-                                    self.res = (True, f"Found in Google JSON: {clean_key}\nSaved for {info.getName()}")
+                                    self.res = (True, f"Found in New Link: {clean_key}\nSaved for {info.getName()}")
                                     found = True; break
                 except: pass
 
-            # --- المحطة الثالثة: البحث في Firebase ---
-            if not found:
-                try:
-                    resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
-                    db = json.loads(resp)
-                    if db:
-                        for db_key, db_val in db.items():
-                            db_key_up = db_key.upper()
-                            if str(curr_freq) in db_key_up and ch_name in db_key_up:
-                                clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
-                                if len(clean_key) == 16:
-                                    if self.save_biss_key(ch_hash, clean_key, info.getName()):
-                                        self.res = (True, f"Found in Firebase: {clean_key}\nSaved for {info.getName()}")
-                                        found = True; break
-                        if not found:
-                            for db_key, db_val in db.items():
-                                db_key_up = db_key.upper()
-                                if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
-                                    clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
-                                    if len(clean_key) == 16:
-                                        if self.save_biss_key(ch_hash, clean_key, info.getName()):
-                                            self.res = (True, f"Found by Freq (FB): {clean_key}\nSaved for {info.getName()}")
-                                            found = True; break
-                except: pass
-
-            # --- المحطة الأخيرة: البحث في Google Sheets ---
             if not found:
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 try:
@@ -568,7 +571,8 @@ class BISSPro(Screen):
                             sheet_info = row[0].upper()
                             nums = re.findall(r'\d+', sheet_info)
                             if len(nums) >= 2:
-                                sheet_freq = int(nums[0]); sheet_sr = int(nums[1])
+                                sheet_freq = int(nums[0])
+                                sheet_sr = int(nums[1])
                                 if abs(curr_freq - sheet_freq) <= 3 and curr_pol in sheet_info and abs(curr_sr - sheet_sr) <= 10:
                                     if len(row) >= 3 and row[2].strip():
                                         sheet_name_filter = row[2].strip().upper()
@@ -578,7 +582,7 @@ class BISSPro(Screen):
                                     clean_key = row[1].replace(" ", "").strip().upper()
                                     if len(clean_key) == 16:
                                         if self.save_biss_key(ch_hash, clean_key, info.getName()):
-                                            self.res = (True, f"Found in Sheets: {clean_key}\nSaved in {self.save_mode} Mode"); found = True; break
+                                            self.res = (True, f"Found: {clean_key}\nSaved in {self.save_mode} Mode"); found = True; break
                 except: pass
             
             if not found: self.res = (False, "Not found for %d %s %d" % (curr_freq, curr_pol, curr_sr))
@@ -600,15 +604,12 @@ class BissProServiceWatcher:
         service = self.session.nav.getCurrentService()
         if not service: return
         info = service.info()
-        # --- التأكد أن القناة مشفرة بنظام BISS CAID 0x2600 حصراً ---
         if info.getInfo(iServiceInformation.sIsCrypted):
             is_biss = False
             caids = info.getInfoObject(iServiceInformation.sCAIDs)
             if caids:
                 for caid in caids:
-                    if caid == 0x2600:
-                        is_biss = True
-                        break
+                    if caid == 0x2600: is_biss = True; break
             if is_biss:
                 self.is_scanning = True
                 Thread(target=self.bg_do_auto, args=(service,)).start()
@@ -625,6 +626,7 @@ class BissProServiceWatcher:
             curr_sr = int(t_data.get("symbol_rate", 0) // 1000)
             
             freq_search = "%s %s %s" % (curr_freq, curr_pol, curr_sr)
+            
             ch_hash = getHash(self.session)
             if not ch_hash:
                 raw_sid = info.getInfo(iServiceInformation.sSID)
@@ -633,26 +635,51 @@ class BissProServiceWatcher:
             
             found = False
             
-            # --- البحث التلقائي في الخلفية (GitHub أولاً) ---
-            for url in GITHUB_SOURCES:
-                try:
-                    headers = {'User-Agent': 'Mozilla/5.0'}
-                    req_g = urllib.request.Request(url, headers=headers)
-                    resp_g = urllib.request.urlopen(req_g, timeout=6, context=ctx).read().decode("utf-8")
-                    data_g = json.loads(resp_g)
-                    for entry in data_g:
-                        json_freq = str(entry.get("frequency", "")).split()[0]
-                        json_id = entry.get("id", "").strip().upper()
-                        if json_freq in str(curr_freq):
-                            if json_id in ch_name or ch_name in json_id:
-                                clean = entry.get("key", "").replace(" ", "").strip().upper()
-                                if len(clean) == 16:
-                                    if self.save_biss_key_background(ch_hash, clean, info.getName()):
-                                        found = True; break
-                    if found: break
-                except: pass
+            try:
+                # --- تطوير الربط في الخلفية (شرط التردد واسم القناة معاً) ---
+                resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
+                db = json.loads(resp)
+                if db:
+                    # الخطوة 1: تطابق تام (الاسم والتردد)
+                    for db_key, db_val in db.items():
+                        db_key_up = db_key.upper()
+                        if str(curr_freq) in db_key_up and ch_name in db_key_up:
+                            clean = db_val.replace(" ", "").replace(":", "").strip().upper()
+                            if len(clean) == 16: 
+                                self.save_biss_key_background(ch_hash, clean, info.getName())
+                                found = True; break
+                    
+                    # الخطوة 2: البحث بالتردد إذا لم ينجح الأول
+                    if not found:
+                        for db_key, db_val in db.items():
+                            db_key_up = db_key.upper()
+                            if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
+                                clean = db_val.replace(" ", "").replace(":", "").strip().upper()
+                                if len(clean) == 16: 
+                                    self.save_biss_key_background(ch_hash, clean, info.getName())
+                                    found = True; break
+            except: pass
 
-            # --- البحث التلقائي في Google JSON ---
+            # --- البحث في الخلفية داخل روابط GITHUB_SOURCES المضافة ---
+            if not found:
+                for g_url in GITHUB_SOURCES:
+                    try:
+                        headers = {'User-Agent': 'Mozilla/5.0'}
+                        req_g = urllib.request.Request(g_url, headers=headers)
+                        resp_g = urllib.request.urlopen(req_g, timeout=8, context=ctx).read().decode("utf-8")
+                        json_g = json.loads(resp_g)
+                        if isinstance(json_g, list):
+                            for item in json_g:
+                                raw_f = str(item.get("frequency", "")).upper()
+                                if str(curr_freq) in raw_f and curr_pol in raw_f:
+                                    clean = item.get("key", "").replace(" ", "").strip().upper()
+                                    if len(clean) == 16:
+                                        self.save_biss_key_background(ch_hash, clean, info.getName())
+                                        found = True; break
+                        if found: break
+                    except: pass
+
+            # --- البحث في الخلفية داخل الرابط الجديد المضاف (JSON) ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -664,30 +691,8 @@ class BissProServiceWatcher:
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
                             clean = item.get("key", "").replace(" ", "").strip().upper()
                             if len(clean) == 16:
-                                kib = self.save_biss_key_background(ch_hash, clean, info.getName())
+                                self.save_biss_key_background(ch_hash, clean, info.getName())
                                 found = True; break
-                except: pass
-
-            if not found:
-                try:
-                    resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
-                    db = json.loads(resp)
-                    if db:
-                        for db_key, db_val in db.items():
-                            db_key_up = db_key.upper()
-                            if str(curr_freq) in db_key_up and ch_name in db_key_up:
-                                clean = db_val.replace(" ", "").replace(":", "").strip().upper()
-                                if len(clean) == 16: 
-                                    if self.save_biss_key_background(ch_hash, clean, info.getName()):
-                                        found = True; break
-                        if not found:
-                            for db_key, db_val in db.items():
-                                db_key_up = db_key.upper()
-                                if (freq_search in db_key_up) or (str(curr_freq) in db_key_up):
-                                    clean = db_val.replace(" ", "").replace(":", "").strip().upper()
-                                    if len(clean) == 16: 
-                                        if self.save_biss_key_background(ch_hash, clean, info.getName()):
-                                            found = True; break
                 except: pass
 
             if not found:
@@ -708,9 +713,7 @@ class BissProServiceWatcher:
                                         if sheet_name_filter not in curr_ch_name and curr_ch_name not in sheet_name_filter:
                                             continue
                                     clean = row[1].replace(" ", "").strip().upper()
-                                    if len(clean) == 16: 
-                                        if self.save_biss_key_background(ch_hash, clean, info.getName()):
-                                            break
+                                    if len(clean) == 16: self.save_biss_key_background(ch_hash, clean, info.getName()); break
                 except: pass
         except: pass
         self.is_scanning = False
@@ -724,6 +727,7 @@ class BissProServiceWatcher:
                     with open(MODE_FILE, "r") as f:
                         current_mode = f.read().strip().lower()
                 except: pass
+
             current_date = time.strftime("%d/%m/%Y")
             alt_hash = "00000000"
             service = self.session.nav.getCurrentService()
@@ -734,31 +738,28 @@ class BissProServiceWatcher:
                 if vpid == 65535 or vpid == -1: vpid = 0
                 alt_hash = "%04X%04X" % (sid, vpid)
 
-            # التحقق الذكي لمنع التكرار التام: لو الـ ID والشفرة متطابقين بالفعل في الملف لا داعي للكتابة مجدداً
             if os.path.exists(target):
                 with open(target, "r") as f:
                     content = f.read().upper()
                     check_smart = f"F {full_id.upper()} 00000000 {key.upper()}" in content
                     check_classic = f"F {alt_hash.upper()} 00000000 {key.upper()}" in content
+                    
                     if current_mode == "smart" and check_smart: return False
                     if current_mode == "classic" and check_classic: return False
                     if current_mode == "dual" and check_smart and check_classic: return False
 
-            # قراءة وتنظيف الملف من أي سطر قديم يحمل نفس الـ Hash أو Alt Hash (تحديث الشفرة فقط ومنع التكرار)
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        up_line = line.upper().strip()
-                        if up_line.startswith(f"F {full_id.upper()}") or up_line.startswith(f"F {alt_hash.upper()}"):
-                            continue
-                        lines.append(line)
-
+                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
+                            lines.append(line)
+            
             if current_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
             if current_mode in ["classic", "dual"]:
                 lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
-
+            
             if safe_save_softcam(target, lines):
                 self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
                 return True
@@ -826,9 +827,9 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <eLabel text="OK: confirm  |  ◄ ► : move  left / right  |  ▲ ▼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(29)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <eLabel text="OK: confirm  |  ◄ ► : move  left / right  |  ▲ ▼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
+            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
             <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
             <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
@@ -870,8 +871,7 @@ class HexInputScreen(Screen):
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
         char_col = ""
-        for i, c in enumerate(self.chars): 
-            char_col += ("[%s]\n" if i == self.char_index else " %s \n") % c
+        for i, c in enumerate(self.chars): char_col += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
         self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
