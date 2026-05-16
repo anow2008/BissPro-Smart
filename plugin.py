@@ -523,7 +523,7 @@ class BISSPro(Screen):
                                         found = True; break
             except: pass
 
-            # --- البحث في روابط GITHUB_SOURCES المضافة ---
+            # --- البحث في روابط GITHUB_SOURCES المضافة مع فلترة الـ id للقنوات المتكررة ---
             if not found:
                 for g_url in GITHUB_SOURCES:
                     try:
@@ -535,6 +535,10 @@ class BISSPro(Screen):
                             for item in json_g:
                                 raw_f = str(item.get("frequency", "")).upper()
                                 if str(curr_freq) in raw_f and curr_pol in raw_f:
+                                    # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                                    json_id = str(item.get("id", "")).upper().strip()
+                                    if json_id and (json_id not in ch_name and ch_name not in json_id):
+                                        continue
                                     clean_key = item.get("key", "").replace(" ", "").strip().upper()
                                     if len(clean_key) == 16:
                                         if self.save_biss_key(ch_hash, clean_key, info.getName()):
@@ -543,7 +547,7 @@ class BISSPro(Screen):
                         if found: break
                     except: pass
 
-            # --- البحث في الرابط الجديد (NEW_JSON_URL) المضاف كخيار إضافي ---
+            # --- البحث في الرابط الجديد (NEW_JSON_URL) المضاف مع فلترة الـ id للقنوات المتكررة ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -551,9 +555,12 @@ class BISSPro(Screen):
                     resp_j = urllib.request.urlopen(req_j, timeout=8, context=ctx).read().decode("utf-8")
                     json_db = json.loads(resp_j)
                     for item in json_db:
-                        # تحويل التردد في الملف للمقارنة
                         raw_f = str(item.get("frequency", "")).upper()
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
+                            # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                            json_id = str(item.get("id", "")).upper().strip()
+                            if json_id and (json_id not in ch_name and ch_name not in json_id):
+                                continue
                             clean_key = item.get("key", "").replace(" ", "").strip().upper()
                             if len(clean_key) == 16:
                                 if self.save_biss_key(ch_hash, clean_key, info.getName()):
@@ -660,7 +667,7 @@ class BissProServiceWatcher:
                                     found = True; break
             except: pass
 
-            # --- البحث في الخلفية داخل روابط GITHUB_SOURCES المضافة ---
+            # --- البحث في الخلفية داخل روابط GITHUB_SOURCES المضافة مع فلترة الـ id للقنوات المتكررة ---
             if not found:
                 for g_url in GITHUB_SOURCES:
                     try:
@@ -672,6 +679,10 @@ class BissProServiceWatcher:
                             for item in json_g:
                                 raw_f = str(item.get("frequency", "")).upper()
                                 if str(curr_freq) in raw_f and curr_pol in raw_f:
+                                    # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                                    json_id = str(item.get("id", "")).upper().strip()
+                                    if json_id and (json_id not in ch_name and ch_name not in json_id):
+                                        continue
                                     clean = item.get("key", "").replace(" ", "").strip().upper()
                                     if len(clean) == 16:
                                         self.save_biss_key_background(ch_hash, clean, info.getName())
@@ -679,7 +690,7 @@ class BissProServiceWatcher:
                         if found: break
                     except: pass
 
-            # --- البحث في الخلفية داخل الرابط الجديد المضاف (JSON) ---
+            # --- البحث في الخلفية داخل الرابط الجديد المضاف (JSON) مع فلترة الـ id للقنوات المتكررة ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -689,6 +700,10 @@ class BissProServiceWatcher:
                     for item in json_db:
                         raw_f = str(item.get("frequency", "")).upper()
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
+                            # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                            json_id = str(item.get("id", "")).upper().strip()
+                            if json_id and (json_id not in ch_name and ch_name not in json_id):
+                                continue
                             clean = item.get("key", "").replace(" ", "").strip().upper()
                             if len(clean) == 16:
                                 self.save_biss_key_background(ch_hash, clean, info.getName())
