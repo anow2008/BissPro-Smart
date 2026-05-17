@@ -336,14 +336,18 @@ class BISSPro(Screen):
         target = get_softcam_path()
         if not os.path.exists(target): return ""
         
-        alt_hash = ""
+        alt_hash_video = ""
+        alt_hash_audio = ""
         service = self.session.nav.getCurrentService()
         if service:
             info = service.info()
             sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
             vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
+            apid = info.getInfo(iServiceInformation.sAudioPID) & 0xFFFF
             if vpid == 65535 or vpid == -1: vpid = 0
-            alt_hash = "%04X%04X" % (sid, vpid)
+            if apid == 65535 or apid == -1: apid = 0
+            alt_hash_video = "%04X%04X" % (sid, vpid)
+            alt_hash_audio = "%04X%04X" % (sid, apid)
 
         try:
             with open(target, "r") as f:
@@ -353,9 +357,15 @@ class BISSPro(Screen):
                         parts = line.split()
                         if len(parts) > 3: return parts[3][:16]
                 
-                if alt_hash:
+                if alt_hash_video:
                     for line in content:
-                        if f"F {alt_hash.upper()}" in line.upper():
+                        if f"F {alt_hash_video.upper()}" in line.upper():
+                            parts = line.split()
+                            if len(parts) > 3: return parts[3][:16]
+
+                if alt_hash_audio:
+                    for line in content:
+                        if f"F {alt_hash_audio.upper()}" in line.upper():
                             parts = line.split()
                             if len(parts) > 3: return parts[3][:16]
         except: pass
@@ -398,26 +408,31 @@ class BISSPro(Screen):
             if not os.path.exists(target_dir): os.makedirs(target_dir)
 
             current_date = time.strftime("%d/%m/%Y")
-            alt_hash = "00000000"
+            alt_hash_video = "00000000"
+            alt_hash_audio = "00000000"
             service = self.session.nav.getCurrentService()
             if service:
                 info = service.info()
                 sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
                 vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
+                apid = info.getInfo(iServiceInformation.sAudioPID) & 0xFFFF
                 if vpid == 65535 or vpid == -1: vpid = 0
-                alt_hash = "%04X%04X" % (sid, vpid)
+                if apid == 65535 or apid == -1: apid = 0
+                alt_hash_video = "%04X%04X" % (sid, vpid)
+                alt_hash_audio = "%04X%04X" % (sid, apid)
 
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
+                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash_video.upper()}" not in line.upper() and f"F {alt_hash_audio.upper()}" not in line.upper():
                             lines.append(line)
             
             if self.save_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
             if self.save_mode in ["classic", "dual"]:
-                lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
+                lines.append(f"F {alt_hash_video.upper()} 00000000 {key.upper()} ;{name} (Classic Video) | {current_date}\n")
+                lines.append(f"F {alt_hash_audio.upper()} 00000000 {key.upper()} ;{name} (Classic Audio) | {current_date}\n")
             
             with open(target, "w") as f:
                 f.writelines(lines)
@@ -727,36 +742,42 @@ class BissProServiceWatcher:
                 except: pass
 
             current_date = time.strftime("%d/%m/%Y")
-            alt_hash = "00000000"
+            alt_hash_video = "00000000"
+            alt_hash_audio = "00000000"
             service = self.session.nav.getCurrentService()
             if service:
                 info = service.info()
                 sid = info.getInfo(iServiceInformation.sSID) & 0xFFFF
                 vpid = info.getInfo(iServiceInformation.sVideoPID) & 0xFFFF
+                apid = info.getInfo(iServiceInformation.sAudioPID) & 0xFFFF
                 if vpid == 65535 or vpid == -1: vpid = 0
-                alt_hash = "%04X%04X" % (sid, vpid)
+                if apid == 65535 or apid == -1: apid = 0
+                alt_hash_video = "%04X%04X" % (sid, vpid)
+                alt_hash_audio = "%04X%04X" % (sid, apid)
 
             if os.path.exists(target):
                 with open(target, "r") as f:
                     content = f.read().upper()
                     check_smart = f"F {full_id.upper()} 00000000 {key.upper()}" in content
-                    check_classic = f"F {alt_hash.upper()} 00000000 {key.upper()}" in content
+                    check_video = f"F {alt_hash_video.upper()} 00000000 {key.upper()}" in content
+                    check_audio = f"F {alt_hash_audio.upper()} 00000000 {key.upper()}" in content
                     
                     if current_mode == "smart" and check_smart: return False
-                    if current_mode == "classic" and check_classic: return False
-                    if current_mode == "dual" and check_smart and check_classic: return False
+                    if current_mode == "classic" and check_video and check_audio: return False
+                    if current_mode == "dual" and check_smart and check_video and check_audio: return False
 
             lines = []
             if os.path.exists(target):
                 with open(target, "r") as f:
                     for line in f:
-                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash.upper()}" not in line.upper():
+                        if f"F {full_id.upper()}" not in line.upper() and f"F {alt_hash_video.upper()}" not in line.upper() and f"F {alt_hash_audio.upper()}" not in line.upper():
                             lines.append(line)
             
             if current_mode in ["smart", "dual"]:
                 lines.append(f"F {full_id.upper()} 00000000 {key.upper()} ;{name} (Smart) | {current_date}\n")
             if current_mode in ["classic", "dual"]:
-                lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
+                lines.append(f"F {alt_hash_video.upper()} 00000000 {key.upper()} ;{name} (Classic Video) | {current_date}\n")
+                lines.append(f"F {alt_hash_audio.upper()} 00000000 {key.upper()} ;{name} (Classic Audio) | {current_date}\n")
             
             with open(target, "w") as f:
                 f.writelines(lines)
