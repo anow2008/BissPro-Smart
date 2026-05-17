@@ -100,32 +100,6 @@ def get_softcam_path():
         if os.path.exists(os.path.dirname(p)): return p
     return "/etc/tuxbox/config/SoftCam.Key"
 
-def safe_save_softcam(target, lines):
-    """دالة الحفظ الآمنة باستخدام ملف مؤقت لحماية الفلاشة"""
-    temp_file = target + ".tmp"
-    try:
-        target_dir = os.path.dirname(target)
-        if not os.path.exists(target_dir): os.makedirs(target_dir)
-        
-        with open(temp_file, "w") as f:
-            if isinstance(lines, list):
-                f.writelines(lines)
-            else:
-                f.write(lines)
-            f.flush()
-            os.fsync(f.fileno())
-            
-        if os.path.exists(temp_file):
-            if os.path.exists(target): os.remove(target)
-            os.rename(temp_file, target)
-            os.chmod(target, 0o644)
-            restart_softcam_global()
-            return True
-    except Exception as e:
-        print("[BissPro] Safe Save Error:", str(e))
-        if os.path.exists(temp_file): os.remove(temp_file)
-    return False
-
 def restart_softcam_global():
     scripts = ["/etc/init.d/softcam", "/etc/init.d/cardserver", "/etc/init.d/softcam.oscam", "/etc/init.d/softcam.ncam", "/etc/init.d/softcam.oscam_emu"]
     restarted = False
@@ -420,6 +394,9 @@ class BISSPro(Screen):
     def save_biss_key(self, full_id, key, name):
         target = get_softcam_path()
         try:
+            target_dir = os.path.dirname(target)
+            if not os.path.exists(target_dir): os.makedirs(target_dir)
+
             current_date = time.strftime("%d/%m/%Y")
             alt_hash = "00000000"
             service = self.session.nav.getCurrentService()
@@ -442,8 +419,15 @@ class BISSPro(Screen):
             if self.save_mode in ["classic", "dual"]:
                 lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
             
-            return safe_save_softcam(target, lines)
-        except: return False
+            with open(target, "w") as f:
+                f.writelines(lines)
+                f.flush()
+            os.chmod(target, 0o644)
+            restart_softcam_global()
+            return True
+        except Exception as e:
+            print("[BissPro] Save Error:", str(e))
+            return False
 
     def action_update(self): 
         self["status"].setText("Downloading Softcam..."); 
@@ -459,7 +443,6 @@ class BISSPro(Screen):
             data = urllib.request.urlopen(req, context=ctx).read()
             target_path = get_softcam_path()
             
-            # --- تم إلغاء الحفظ الآمن هنا لحل مشكلة الفشل في الزر الأصفر ---
             with open(target_path, "wb") as f:
                 f.write(data)
             restart_softcam_global()
@@ -775,9 +758,13 @@ class BissProServiceWatcher:
             if current_mode in ["classic", "dual"]:
                 lines.append(f"F {alt_hash.upper()} 00000000 {key.upper()} ;{name} (Classic) | {current_date}\n")
             
-            if safe_save_softcam(target, lines):
-                self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
-                return True
+            with open(target, "w") as f:
+                f.writelines(lines)
+                f.flush()
+            os.chmod(target, 0o644)
+            restart_softcam_global()
+            self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
+            return True
         except: return False
         
 class BissManagerList(Screen):
@@ -817,7 +804,13 @@ class BissManagerList(Screen):
             for line in lines:
                 if line.strip() == self.old_line.strip(): new_list.append(new_line + "\n")
                 else: new_list.append(line)
-            if safe_save_softcam(path, new_list): self.load_keys()
+            
+            with open(path, "w") as f:
+                f.writelines(new_list)
+                f.flush()
+            os.chmod(path, 0o644)
+            restart_softcam_global()
+            self.load_keys()
         except: pass
     def delete_confirm(self):
         current = self["keylist"].getCurrent()
@@ -830,7 +823,13 @@ class BissManagerList(Screen):
                 new_list = []
                 for line in lines:
                     if line.strip() != current.strip(): new_list.append(line)
-                if safe_save_softcam(path, new_list): self.load_keys()
+                
+                with open(path, "w") as f:
+                    f.writelines(new_list)
+                    f.flush()
+                os.chmod(path, 0o644)
+                restart_softcam_global()
+                self.load_keys()
             except: pass
 
 class HexInputScreen(Screen):
