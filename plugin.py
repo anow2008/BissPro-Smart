@@ -89,9 +89,9 @@ GITHUB_SOURCES = [
 
 def get_softcam_path():
     paths = [
-        "/etc/tuxbox/config/oscam/SoftCam.Key", 
-        "/etc/tuxbox/config/ncam/SoftCam.Key", 
         "/etc/tuxbox/config/SoftCam.Key", 
+        "/etc/tuxbox/config/ncam/SoftCam.Key", 
+        "/etc/tuxbox/config/oscam/SoftCam.Key", 
         "/usr/keys/SoftCam.Key"
     ]
     for p in paths:
