@@ -4,7 +4,7 @@ from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
 
-# --- تم تبسيط التنبيهات لإلغاء المزعج منها والحفاظ على استقرار البلجن ---
+# --- طھظ… طھط¨ط³ظٹط· ط§ظ„طھظ†ط¨ظٹظ‡ط§طھ ظ„ط¥ظ„ط؛ط§ط، ط§ظ„ظ…ط²ط¹ط¬ ظ…ظ†ظ‡ط§ ظˆط§ظ„ط­ظپط§ط¸ ط¹ظ„ظ‰ ط§ط³طھظ‚ط±ط§ط± ط§ظ„ط¨ظ„ط¬ظ† ---
 def addNotification(*args, **kwargs):
     pass
 # --------------------------------------------------
@@ -24,7 +24,7 @@ from array import array
 import binascii
 
 # ==========================================================
-# إعدادات الهاش CRC32
+# ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ظ‡ط§ط´ CRC32
 # ==========================================================
 crc32_table = array("L")
 for byte in range(256):
@@ -63,7 +63,7 @@ def getHash(session):
         return None
 
 # ==========================================================
-# الإعدادات والمسارات ودالة الحفظ الآمنة
+# ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ ظˆط§ظ„ظ…ط³ط§ط±ط§طھ ظˆط¯ط§ظ„ط© ط§ظ„ط­ظپط¸ ط§ظ„ط¢ظ…ظ†ط©
 # ==========================================================
 PLUGIN_PATH = os.path.dirname(__file__) + "/"
 VERSION_NUM = "v1.0" 
@@ -77,10 +77,10 @@ FIREBASE_URL = "https://bisspro-dcfa5-default-rtdb.europe-west1.firebasedatabase
 SHEET_ID = "1-7Dgnii46UYR4HMorgpwtKC_7Fz-XuTfDV6vO2EkzQo"
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % SHEET_ID
 
-# --- الرابط الجديد المضاف (JSON) ---
+# --- ط§ظ„ط±ط§ط¨ط· ط§ظ„ط¬ط¯ظٹط¯ ط§ظ„ظ…ط¶ط§ظپ (JSON) ---
 NEW_JSON_URL = "https://script.google.com/macros/s/AKfycbwRfgMD6ReOMoNlXlNc0jSSjs2jB6Grg9l4Ucry-x7yJTMh74wFgiuBuE2-kFd4xirdYg/exec"
 
-# --- الروابط الإضافية المطلوبة من الجيت هاب ---
+# --- ط§ظ„ط±ظˆط§ط¨ط· ط§ظ„ط¥ط¶ط§ظپظٹط© ط§ظ„ظ…ط·ظ„ظˆط¨ط© ظ…ظ† ط§ظ„ط¬ظٹطھ ظ‡ط§ط¨ ---
 GITHUB_SOURCES = [
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/bisskeys.json",
     "https://raw.githubusercontent.com/anow2008/biss/refs/heads/main/feeds.json",
@@ -494,14 +494,14 @@ class BISSPro(Screen):
             found = False
             
             try:
-                # --- تطوير الربط الأساسي ليكون ذكياً (الأولوية للاسم والتردد معاً) ---
+                # --- طھط·ظˆظٹط± ط§ظ„ط±ط¨ط· ط§ظ„ط£ط³ط§ط³ظٹ ظ„ظٹظƒظˆظ† ط°ظƒظٹط§ظ‹ (ط§ظ„ط£ظˆظ„ظˆظٹط© ظ„ظ„ط§ط³ظ… ظˆط§ظ„طھط±ط¯ط¯ ظ…ط¹ط§ظ‹) ---
                 resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
                 db = json.loads(resp)
                 if db:
-                    # الخطوة 1: البحث الدقيق (تردد + اسم) - شرط "و" الذكي
+                    # ط§ظ„ط®ط·ظˆط© 1: ط§ظ„ط¨ط­ط« ط§ظ„ط¯ظ‚ظٹظ‚ (طھط±ط¯ط¯ + ط§ط³ظ…) - ط´ط±ط· "ظˆ" ط§ظ„ط°ظƒظٹ
                     for db_key, db_val in db.items():
                         db_key_up = db_key.upper()
-                        # يشترط وجود التردد واسم القناة معاً في المفتاح
+                        # ظٹط´طھط±ط· ظˆط¬ظˆط¯ ط§ظ„طھط±ط¯ط¯ ظˆط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© ظ…ط¹ط§ظ‹ ظپظٹ ط§ظ„ظ…ظپطھط§ط­
                         if str(curr_freq) in db_key_up and ch_name in db_key_up:
                             clean_key = db_val.replace(" ", "").replace(":", "").strip().upper()
                             if len(clean_key) == 16:
@@ -509,7 +509,7 @@ class BISSPro(Screen):
                                     self.res = (True, f"Found Exact: {clean_key}\nSaved for {info.getName()}")
                                     found = True; break
                     
-                    # الخطوة 2: البحث الاحتياطي (بالتردد فقط) كخيار ثانٍ إذا لم ينجح الأول
+                    # ط§ظ„ط®ط·ظˆط© 2: ط§ظ„ط¨ط­ط« ط§ظ„ط§ط­طھظٹط§ط·ظٹ (ط¨ط§ظ„طھط±ط¯ط¯ ظپظ‚ط·) ظƒط®ظٹط§ط± ط«ط§ظ†ظچ ط¥ط°ط§ ظ„ظ… ظٹظ†ط¬ط­ ط§ظ„ط£ظˆظ„
                     if not found:
                         for db_key, db_val in db.items():
                             db_key_up = db_key.upper()
@@ -521,7 +521,7 @@ class BISSPro(Screen):
                                         found = True; break
             except: pass
 
-            # --- البحث في روابط GITHUB_SOURCES المضافة مع فلترة الـ id للقنوات المتكررة ---
+            # --- ط§ظ„ط¨ط­ط« ظپظٹ ط±ظˆط§ط¨ط· GITHUB_SOURCES ط§ظ„ظ…ط¶ط§ظپط© ظ…ط¹ ظپظ„طھط±ط© ط§ظ„ظ€ id ظ„ظ„ظ‚ظ†ظˆط§طھ ط§ظ„ظ…طھظƒط±ط±ط© ---
             if not found:
                 for g_url in GITHUB_SOURCES:
                     try:
@@ -533,7 +533,7 @@ class BISSPro(Screen):
                             for item in json_g:
                                 raw_f = str(item.get("frequency", "")).upper()
                                 if str(curr_freq) in raw_f and curr_pol in raw_f:
-                                    # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                                    # ظپظ„طھط±ط© ط¥ط¶ط§ظپظٹط© ط¨ط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© id ظ„ظ…ظ†ط¹ ط§ظ„طھط¯ط§ط®ظ„ ط¹ظ†ط¯ طھظƒط±ط§ط± ط§ظ„طھط±ط¯ط¯
                                     json_id = str(item.get("id", "")).upper().strip()
                                     if json_id and (json_id not in ch_name and ch_name not in json_id):
                                         continue
@@ -545,7 +545,7 @@ class BISSPro(Screen):
                         if found: break
                     except: pass
 
-            # --- البحث في الرابط الجديد (NEW_JSON_URL) المضاف مع فلترة الـ id للقنوات المتكررة ---
+            # --- ط§ظ„ط¨ط­ط« ظپظٹ ط§ظ„ط±ط§ط¨ط· ط§ظ„ط¬ط¯ظٹط¯ (NEW_JSON_URL) ط§ظ„ظ…ط¶ط§ظپ ظ…ط¹ ظپظ„طھط±ط© ط§ظ„ظ€ id ظ„ظ„ظ‚ظ†ظˆط§طھ ط§ظ„ظ…طھظƒط±ط±ط© ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -555,7 +555,7 @@ class BISSPro(Screen):
                     for item in json_db:
                         raw_f = str(item.get("frequency", "")).upper()
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
-                            # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                            # ظپظ„طھط±ط© ط¥ط¶ط§ظپظٹط© ط¨ط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© id ظ„ظ…ظ†ط¹ ط§ظ„طھط¯ط§ط®ظ„ ط¹ظ†ط¯ طھظƒط±ط§ط± ط§ظ„طھط±ط¯ط¯
                             json_id = str(item.get("id", "")).upper().strip()
                             if json_id and (json_id not in ch_name and ch_name not in json_id):
                                 continue
@@ -641,11 +641,11 @@ class BissProServiceWatcher:
             found = False
             
             try:
-                # --- تطوير الربط في الخلفية (شرط التردد واسم القناة معاً) ---
+                # --- طھط·ظˆظٹط± ط§ظ„ط±ط¨ط· ظپظٹ ط§ظ„ط®ظ„ظپظٹط© (ط´ط±ط· ط§ظ„طھط±ط¯ط¯ ظˆط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© ظ…ط¹ط§ظ‹) ---
                 resp = urllib.request.urlopen(FIREBASE_URL, timeout=8, context=ctx).read()
                 db = json.loads(resp)
                 if db:
-                    # الخطوة 1: تطابق تام (الاسم والتردد)
+                    # ط§ظ„ط®ط·ظˆط© 1: طھط·ط§ط¨ظ‚ طھط§ظ… (ط§ظ„ط§ط³ظ… ظˆط§ظ„طھط±ط¯ط¯)
                     for db_key, db_val in db.items():
                         db_key_up = db_key.upper()
                         if str(curr_freq) in db_key_up and ch_name in db_key_up:
@@ -654,7 +654,7 @@ class BissProServiceWatcher:
                                 self.save_biss_key_background(ch_hash, clean, info.getName())
                                 found = True; break
                     
-                    # الخطوة 2: البحث بالتردد إذا لم ينجح الأول
+                    # ط§ظ„ط®ط·ظˆط© 2: ط§ظ„ط¨ط­ط« ط¨ط§ظ„طھط±ط¯ط¯ ط¥ط°ط§ ظ„ظ… ظٹظ†ط¬ط­ ط§ظ„ط£ظˆظ„
                     if not found:
                         for db_key, db_val in db.items():
                             db_key_up = db_key.upper()
@@ -665,7 +665,7 @@ class BissProServiceWatcher:
                                     found = True; break
             except: pass
 
-            # --- البحث في الخلفية داخل روابط GITHUB_SOURCES المضافة مع فلترة الـ id للقنوات المتكررة ---
+            # --- ط§ظ„ط¨ط­ط« ظپظٹ ط§ظ„ط®ظ„ظپظٹط© ط¯ط§ط®ظ„ ط±ظˆط§ط¨ط· GITHUB_SOURCES ط§ظ„ظ…ط¶ط§ظپط© ظ…ط¹ ظپظ„طھط±ط© ط§ظ„ظ€ id ظ„ظ„ظ‚ظ†ظˆط§طھ ط§ظ„ظ…طھظƒط±ط±ط© ---
             if not found:
                 for g_url in GITHUB_SOURCES:
                     try:
@@ -677,7 +677,7 @@ class BissProServiceWatcher:
                             for item in json_g:
                                 raw_f = str(item.get("frequency", "")).upper()
                                 if str(curr_freq) in raw_f and curr_pol in raw_f:
-                                    # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                                    # ظپظ„طھط±ط© ط¥ط¶ط§ظپظٹط© ط¨ط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© id ظ„ظ…ظ†ط¹ ط§ظ„طھط¯ط§ط®ظ„ ط¹ظ†ط¯ طھظƒط±ط§ط± ط§ظ„طھط±ط¯ط¯
                                     json_id = str(item.get("id", "")).upper().strip()
                                     if json_id and (json_id not in ch_name and ch_name not in json_id):
                                         continue
@@ -688,7 +688,7 @@ class BissProServiceWatcher:
                         if found: break
                     except: pass
 
-            # --- البحث في الخلفية داخل الرابط الجديد المضاف (JSON) مع فلترة الـ id للقنوات المتكررة ---
+            # --- ط§ظ„ط¨ط­ط« ظپظٹ ط§ظ„ط®ظ„ظپظٹط© ط¯ط§ط®ظ„ ط§ظ„ط±ط§ط¨ط· ط§ظ„ط¬ط¯ظٹط¯ ط§ظ„ظ…ط¶ط§ظپ (JSON) ظ…ط¹ ظپظ„طھط±ط© ط§ظ„ظ€ id ظ„ظ„ظ‚ظ†ظˆط§طھ ط§ظ„ظ…طھظƒط±ط±ط© ---
             if not found:
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -698,7 +698,7 @@ class BissProServiceWatcher:
                     for item in json_db:
                         raw_f = str(item.get("frequency", "")).upper()
                         if str(curr_freq) in raw_f and curr_pol in raw_f:
-                            # فلترة إضافية باسم القناة id لمنع التداخل عند تكرار التردد
+                            # ظپظ„طھط±ط© ط¥ط¶ط§ظپظٹط© ط¨ط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© id ظ„ظ…ظ†ط¹ ط§ظ„طھط¯ط§ط®ظ„ ط¹ظ†ط¯ طھظƒط±ط§ط± ط§ظ„طھط±ط¯ط¯
                             json_id = str(item.get("id", "")).upper().strip()
                             if json_id and (json_id not in ch_name and ch_name not in json_id):
                                 continue
@@ -862,7 +862,7 @@ class HexInputScreen(Screen):
             <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
             <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
             <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <eLabel text="OK: confirm  |  ◄ ► : move  left / right  |  ▲ ▼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
+            <eLabel text="OK: confirm  |  â—„ â–؛ : move  left / right  |  â–² â–¼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
             <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
             <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
