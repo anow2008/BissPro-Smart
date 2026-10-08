@@ -295,15 +295,15 @@ def key_row(ui, line):
     parts = line.split()
     hash_id = parts[1] if len(parts) > 1 else ""
     key = parts[3] if len(parts) > 3 else ""
-    name = line.split(";", 1)[1].strip() if ";" in line else ""
+    name = line.split(";", 1)[1].split("|")[0].strip() if ";" in line else ""
     fl = RT_HALIGN_LEFT | RT_VALIGN_CENTER
     return [line,
             row_bg(ui, w, h),
-            MultiContentEntryText(pos=(ui.px(20), 0), size=(ui.px(190), h), font=1, flags=fl, text=hash_id,
+            MultiContentEntryText(pos=(ui.px(20), 0), size=(ui.px(150), h), font=1, flags=fl, text=hash_id,
                                   color=_ci(C_MUTED), color_sel=_ci(C_TEXT)),
-            MultiContentEntryText(pos=(ui.px(215), 0), size=(ui.px(340), h), font=0, flags=fl, text=key,
+            MultiContentEntryText(pos=(ui.px(180), 0), size=(ui.px(310), h), font=0, flags=fl, text=key,
                                   color=_ci(C_ACCENT), color_sel=_ci(C_ACCENT)),
-            MultiContentEntryText(pos=(ui.px(565), 0), size=(ui.px(380), h), font=1, flags=fl, text=name,
+            MultiContentEntryText(pos=(ui.px(500), 0), size=(ui.px(450), h), font=1, flags=fl, text=name,
                                   color=_ci(C_TEXT), color_sel=_ci(C_TEXT))]
 
 def choice_row(ui, item):
