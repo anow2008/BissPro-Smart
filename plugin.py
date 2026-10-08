@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
-from Screens.MessageBox import MessageBox
-from Screens.ChoiceBox import ChoiceBox
 
 # --- تم تبسيط التنبيهات لإلغاء المزعج منها والحفاظ على استقرار البلجن ---
 def addNotification(*args, **kwargs):
@@ -15,7 +13,7 @@ from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
-from enigma import iServiceInformation, gFont, eTimer, getDesktop, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
+from enigma import iServiceInformation, gFont, eTimer, getDesktop, eListboxPythonMultiContent, RT_HALIGN_LEFT, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random, csv, json
 import urllib.request
@@ -123,6 +121,299 @@ class AutoScale:
     def px(self, v): return int(v * self.scale)
     def font(self, v): return int(max(20, v * self.scale))
 
+# ==========================================================
+# السكين المدمج - مستقل تماماً عن سكين الصورة
+# كل الألوان والخلفيات والقوائم والرسائل معرّفة هنا
+# ==========================================================
+FONT = "Regular"          # الخط الوحيد المضمون في كل الصور
+C_BG = "#0d1117"
+C_BAR = "#161b26"
+C_PANEL = "#141a25"
+C_ROW = "#1a2233"
+C_SEL = "#2b3f63"
+C_ACCENT = "#f0a30a"
+C_TEXT = "#ffffff"
+C_MUTED = "#8b95a7"
+C_OK = "#2ecc71"
+C_ERR = "#e74c3c"
+C_TRACK = "#222a38"
+
+def _ci(c):
+    return int(c[1:], 16)
+
+def sk_rect(ui, x, y, w, h, color, z=-1):
+    return '<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="%d" />' % (
+        ui.px(x), ui.px(y), ui.px(w), ui.px(h), color, z)
+
+def sk_text(ui, text, x, y, w, h, size=24, fg=C_TEXT, align="left"):
+    return ('<eLabel text="%s" position="%d,%d" size="%d,%d" font="%s;%d" foregroundColor="%s" '
+            'halign="%s" valign="center" transparent="1" />') % (
+        text, ui.px(x), ui.px(y), ui.px(w), ui.px(h), FONT, ui.font(size), fg, align)
+
+def sk_widget(ui, name, x, y, w, h, size=24, fg=C_TEXT, align="left", bg=None, z=0):
+    back = 'backgroundColor="%s"' % bg if bg else 'transparent="1"'
+    return ('<widget name="%s" position="%d,%d" size="%d,%d" font="%s;%d" foregroundColor="%s" %s '
+            'halign="%s" valign="center" zPosition="%d" />') % (
+        name, ui.px(x), ui.px(y), ui.px(w), ui.px(h), FONT, ui.font(size), fg, back, align, z)
+
+def sk_list(ui, name, x, y, w, h, item_h, bg=C_PANEL):
+    return ('<widget name="%s" position="%d,%d" size="%d,%d" itemHeight="%d" scrollbarMode="showNever" '
+            'backgroundColor="%s" backgroundColorSelected="%s" foregroundColor="%s" '
+            'foregroundColorSelected="%s" zPosition="2" />') % (
+        name, ui.px(x), ui.px(y), ui.px(w), ui.px(h), ui.px(item_h), bg, C_SEL, C_TEXT, C_ACCENT)
+
+def sk_progress(ui, name, x, y, w, h, fg=C_OK):
+    return ('<widget name="%s" position="%d,%d" size="%d,%d" foregroundColor="%s" '
+            'backgroundColor="%s" borderWidth="0" />') % (
+        name, ui.px(x), ui.px(y), ui.px(w), ui.px(h), fg, C_TRACK)
+
+def sk_button(ui, color, x, y, w, name=None, text="", size=24):
+    out = sk_rect(ui, x, y + 12, 26, 26, color, 0) + "\n"
+    if name:
+        out += sk_widget(ui, name, x + 38, y, w, 50, size, C_TEXT)
+    else:
+        out += sk_text(ui, text, x + 38, y, w, 50, size, C_TEXT)
+    return out
+
+def sk_screen(ui, w, h):
+    return '<screen position="center,center" size="%d,%d" backgroundColor="%s" flags="wfNoBorder">' % (
+        ui.px(w), ui.px(h), C_BG)
+
+# ---------------- الشاشة الرئيسية ----------------
+def build_main_skin(ui):
+    p = [sk_screen(ui, 1100, 780),
+         sk_rect(ui, 0, 0, 1100, 80, C_BAR),
+         sk_rect(ui, 0, 80, 1100, 3, C_ACCENT),
+         sk_text(ui, "BISSPRO SMART", 35, 14, 520, 52, 40, C_ACCENT),
+         sk_widget(ui, "time_label", 760, 6, 300, 40, 30, C_TEXT, "right"),
+         sk_widget(ui, "date_label", 560, 46, 500, 30, 20, C_MUTED, "right"),
+         sk_rect(ui, 30, 105, 640, 440, C_PANEL),
+         sk_rect(ui, 695, 105, 375, 440, C_PANEL),
+         sk_list(ui, "menu", 40, 115, 620, 420, 100),
+         '<widget name="main_logo" position="%d,%d" size="%d,%d" alphatest="blend" zPosition="1" />' % (
+             ui.px(745), ui.px(170), ui.px(280), ui.px(280)),
+         sk_progress(ui, "main_progress", 30, 566, 1040, 8),
+         sk_widget(ui, "status", 30, 582, 1040, 56, 30, C_ACCENT, "center"),
+         sk_text(ui, "MENU: Save Mode", 30, 646, 400, 30, 20, C_MUTED),
+         sk_widget(ui, "version_label", 870, 646, 200, 30, 20, C_MUTED, "right"),
+         sk_rect(ui, 0, 685, 1100, 95, C_BAR),
+         sk_button(ui, "#e74c3c", 40, 710, 215, "btn_red", size=22),
+         sk_button(ui, "#2ecc71", 305, 710, 215, "btn_green", size=22),
+         sk_button(ui, "#f1c40f", 570, 710, 215, "btn_yellow", size=22),
+         sk_button(ui, "#3498db", 835, 710, 215, "btn_blue", size=22),
+         "</screen>"]
+    return "\n".join(p)
+
+# ---------------- محرر المفاتيح ----------------
+def build_editor_skin(ui):
+    p = [sk_screen(ui, 1000, 700),
+         sk_rect(ui, 0, 0, 1000, 70, C_BAR),
+         sk_rect(ui, 0, 70, 1000, 3, C_ACCENT),
+         sk_text(ui, "KEY EDITOR", 30, 10, 500, 50, 36, C_ACCENT),
+         sk_widget(ui, "count", 700, 16, 270, 40, 26, C_MUTED, "right"),
+         sk_rect(ui, 20, 95, 960, 480, C_PANEL),
+         sk_list(ui, "keylist", 20, 95, 960, 480, 60),
+         sk_rect(ui, 0, 595, 1000, 105, C_BAR),
+         sk_button(ui, "#2ecc71", 40, 625, 200, text="Edit"),
+         sk_button(ui, "#e74c3c", 300, 625, 200, text="Delete"),
+         sk_text(ui, "EXIT: Back", 640, 625, 330, 50, 22, C_MUTED, "right"),
+         "</screen>"]
+    return "\n".join(p)
+
+# ---------------- شاشة إدخال المفتاح ----------------
+def build_hex_skin(ui):
+    p = [sk_screen(ui, 1150, 650),
+         sk_rect(ui, 0, 0, 1150, 80, C_BAR),
+         sk_rect(ui, 0, 80, 1150, 3, C_ACCENT),
+         sk_widget(ui, "channel", 20, 12, 1110, 56, 40, C_ACCENT, "center"),
+         sk_progress(ui, "progress", 175, 105, 800, 10),
+         sk_rect(ui, 20, 130, 990, 120, C_PANEL),
+         sk_widget(ui, "keylabel", 20, 130, 990, 120, 64, C_ACCENT, "center"),
+         sk_rect(ui, 1030, 105, 100, 345, C_PANEL),
+         sk_widget(ui, "char_list", 1030, 108, 100, 340, 45, C_TEXT, "center"),
+         sk_widget(ui, "channel_data", 10, 265, 1130, 44, 30, C_TEXT, "center"),
+         sk_text(ui, "OK: confirm  |  LEFT / RIGHT: move  |  UP / DOWN: letters", 10, 320, 1130, 40, 26, C_MUTED, "center"),
+         sk_rect(ui, 0, 480, 1150, 170, C_BAR),
+         sk_button(ui, "#e74c3c", 60, 535, 170, "l_red", size=26),
+         sk_button(ui, "#2ecc71", 340, 535, 170, "l_green", size=26),
+         sk_button(ui, "#f1c40f", 620, 535, 170, "l_yellow", size=26),
+         sk_button(ui, "#3498db", 900, 535, 210, "l_blue", size=26),
+         "</screen>"]
+    return "\n".join(p)
+
+# ---------------- القوائم (لا تعتمد على ستايل الصورة) ----------------
+def new_list():
+    return MenuList([], enableWrapAround=True, content=eListboxPythonMultiContent)
+
+def setup_list(menu, ui, f0, f1, item_h):
+    try:
+        menu.l.setFont(0, gFont(FONT, ui.font(f0)))
+        menu.l.setFont(1, gFont(FONT, ui.font(f1)))
+        menu.l.setItemHeight(ui.px(item_h))
+    except Exception as e:
+        print("[BissPro] list setup error:", e)
+
+def row_bg(ui, w, h):
+    # خلفية الصف + لون التحديد معرّفين هنا بدل ستايل الصورة
+    return MultiContentEntryText(pos=(0, ui.px(3)), size=(w, h - ui.px(6)), font=0, text="",
+                                 backcolor=_ci(C_ROW), backcolor_sel=_ci(C_SEL))
+
+def menu_row(ui, name, desc, act, icon_path):
+    w, h = ui.px(620), ui.px(100)
+    res = [act, row_bg(ui, w, h)]
+    x_text = ui.px(25)
+    if icon_path and os.path.exists(icon_path):
+        pm = LoadPixmap(cached=True, path=icon_path)
+        if pm:
+            res.append(MultiContentEntryPixmapAlphaTest(pos=(ui.px(15), ui.px(15)), size=(ui.px(70), ui.px(70)), png=pm))
+            x_text = ui.px(105)
+    tw = w - x_text - ui.px(10)
+    res.append(MultiContentEntryText(pos=(x_text, ui.px(10)), size=(tw, ui.px(45)), font=0,
+                                     flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=name,
+                                     color=_ci(C_TEXT), color_sel=_ci(C_ACCENT)))
+    res.append(MultiContentEntryText(pos=(x_text, ui.px(55)), size=(tw, ui.px(35)), font=1,
+                                     flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=desc,
+                                     color=_ci(C_MUTED), color_sel=_ci(C_TEXT)))
+    return res
+
+def key_row(ui, line):
+    w, h = ui.px(960), ui.px(60)
+    parts = line.split()
+    hash_id = parts[1] if len(parts) > 1 else ""
+    key = parts[3] if len(parts) > 3 else ""
+    name = line.split(";", 1)[1].strip() if ";" in line else ""
+    fl = RT_HALIGN_LEFT | RT_VALIGN_CENTER
+    return [line,
+            row_bg(ui, w, h),
+            MultiContentEntryText(pos=(ui.px(20), 0), size=(ui.px(190), h), font=1, flags=fl, text=hash_id,
+                                  color=_ci(C_MUTED), color_sel=_ci(C_TEXT)),
+            MultiContentEntryText(pos=(ui.px(215), 0), size=(ui.px(340), h), font=0, flags=fl, text=key,
+                                  color=_ci(C_ACCENT), color_sel=_ci(C_ACCENT)),
+            MultiContentEntryText(pos=(ui.px(565), 0), size=(ui.px(380), h), font=1, flags=fl, text=name,
+                                  color=_ci(C_TEXT), color_sel=_ci(C_TEXT))]
+
+def choice_row(ui, item):
+    w, h = ui.px(760), ui.px(70)
+    return [item, row_bg(ui, w, h),
+            MultiContentEntryText(pos=(ui.px(25), 0), size=(w - ui.px(50), h), font=0,
+                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=str(item[0]),
+                                  color=_ci(C_TEXT), color_sel=_ci(C_ACCENT))]
+
+# ---------------- رسالة التأكيد الخاصة بالبلجن (بديل MessageBox) ----------------
+class BPMessageBox(Screen):
+    TYPE_YESNO = 0
+    TYPE_INFO = 1
+    TYPE_ERROR = 2
+
+    def __init__(self, session, text="", type=1, timeout=0, **kwargs):
+        self.ui = AutoScale()
+        Screen.__init__(self, session)
+        ui = self.ui
+        self.mtype = type
+        self.yesno = (type == self.TYPE_YESNO)
+        self.sel = 0
+        accent = {0: C_ACCENT, 1: C_OK, 2: C_ERR}.get(type, C_ACCENT)
+        title = {0: "CONFIRM", 1: "INFO", 2: "ERROR"}.get(type, "INFO")
+        p = [sk_screen(ui, 900, 400),
+             sk_rect(ui, 0, 0, 900, 70, C_BAR),
+             sk_rect(ui, 0, 70, 900, 4, accent),
+             sk_text(ui, title, 35, 10, 600, 50, 34, accent),
+             sk_widget(ui, "text", 40, 95, 820, 200, 26, C_TEXT, "center")]
+        if self.yesno:
+            p += [sk_widget(ui, "yes", 120, 315, 300, 60, 28, C_TEXT, "center", "#1f3d2c"),
+                  sk_widget(ui, "yes_on", 120, 315, 300, 60, 28, "#000000", "center", C_OK, 1),
+                  sk_widget(ui, "no", 480, 315, 300, 60, 28, C_TEXT, "center", "#4a2323"),
+                  sk_widget(ui, "no_on", 480, 315, 300, 60, 28, "#ffffff", "center", C_ERR, 1)]
+        else:
+            p.append(sk_widget(ui, "ok_on", 300, 315, 300, 60, 28, "#000000", "center", accent, 1))
+        p.append("</screen>")
+        self.skin = "\n".join(p)
+
+        self["text"] = Label(text)
+        if self.yesno:
+            self["yes"] = Label("YES"); self["yes_on"] = Label("YES")
+            self["no"] = Label("NO"); self["no_on"] = Label("NO")
+        else:
+            self["ok_on"] = Label("OK")
+        self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "DirectionActions"], {
+            "ok": self.on_ok, "cancel": self.on_cancel,
+            "green": self.on_yes, "red": self.on_no,
+            "left": self.toggle, "right": self.toggle}, -1)
+
+        self.timeout = int(timeout or 0)
+        self.timer = eTimer()
+        try: self.timer.callback.append(self.on_timeout)
+        except: self.timer.timeout.connect(self.on_timeout)
+        self.onLayoutFinish.append(self.start)
+        self.onClose.append(self.timer.stop)
+
+    def start(self):
+        self.refresh()
+        if self.timeout > 0:
+            self.timer.start(self.timeout * 1000, True)
+
+    def refresh(self):
+        if self.yesno:
+            if self.sel == 0:
+                self["yes_on"].show(); self["no_on"].hide()
+            else:
+                self["yes_on"].hide(); self["no_on"].show()
+
+    def toggle(self):
+        if self.yesno:
+            self.sel = 1 - self.sel
+            self.refresh()
+
+    def on_ok(self):
+        self.close((self.sel == 0) if self.yesno else True)
+
+    def on_yes(self):
+        if self.yesno: self.close(True)
+
+    def on_no(self):
+        if self.yesno: self.close(False)
+
+    def on_cancel(self):
+        self.close(False)
+
+    def on_timeout(self):
+        self.close(False if self.yesno else True)
+
+# ---------------- قائمة الاختيار الخاصة بالبلجن (بديل ChoiceBox) ----------------
+class BPChoiceBox(Screen):
+    def __init__(self, session, title="", list=None, **kwargs):
+        self.ui = AutoScale()
+        Screen.__init__(self, session)
+        ui = self.ui
+        self.items = [] if list is None else [i for i in list]
+        rows = max(1, min(len(self.items), 8))
+        list_h = rows * 70
+        p = [sk_screen(ui, 800, 90 + list_h + 70),
+             sk_rect(ui, 0, 0, 800, 70, C_BAR),
+             sk_rect(ui, 0, 70, 800, 4, C_ACCENT),
+             sk_widget(ui, "title", 35, 10, 730, 50, 30, C_ACCENT),
+             sk_rect(ui, 20, 90, 760, list_h, C_PANEL),
+             sk_list(ui, "list", 20, 90, 760, list_h, 70),
+             sk_text(ui, "OK: Select     EXIT: Cancel", 20, 90 + list_h + 15, 760, 40, 22, C_MUTED, "center"),
+             "</screen>"]
+        self.skin = "\n".join(p)
+        self["title"] = Label(title)
+        self["list"] = new_list()
+        self["actions"] = ActionMap(["OkCancelActions"], {"ok": self.on_ok, "cancel": self.on_cancel}, -1)
+        self.onLayoutFinish.append(self.fill)
+
+    def fill(self):
+        setup_list(self["list"], self.ui, 30, 22, 70)
+        self["list"].setList([choice_row(self.ui, i) for i in self.items])
+
+    def on_ok(self):
+        cur = self["list"].getCurrent()
+        self.close(cur[0] if cur else None)
+
+    def on_cancel(self):
+        self.close(None)
+
+
 class BISSPro(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
@@ -136,26 +427,7 @@ class BISSPro(Screen):
                     self.save_mode = f.read().strip().lower()
             except: pass
         
-        self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1100)},{self.ui.px(780)}" title="BissPro Smart {VERSION_NUM}">
-            <widget name="date_label" position="{self.ui.px(50)},{self.ui.px(20)}" size="{self.ui.px(450)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="left" foregroundColor="#bbbbbb" transparent="1" />
-            <widget name="time_label" position="{self.ui.px(750)},{self.ui.px(20)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" halign="right" foregroundColor="#ffffff" transparent="1" />
-            <widget name="menu" position="{self.ui.px(50)},{self.ui.px(80)}" size="{self.ui.px(600)},{self.ui.px(410)}" itemHeight="{self.ui.px(100)}" scrollbarMode="showOnDemand" transparent="1" zPosition="2"/>
-            <widget name="main_logo" position="{self.ui.px(720)},{self.ui.px(120)}" size="{self.ui.px(300)},{self.ui.px(300)}" alphatest="blend" transparent="1" zPosition="1" />
-            <widget name="main_progress" position="{self.ui.px(50)},{self.ui.px(510)}" size="{self.ui.px(1000)},{self.ui.px(12)}" foregroundColor="#00ff00" backgroundColor="#222222" />
-            <widget name="version_label" position="{self.ui.px(850)},{self.ui.px(525)}" size="{self.ui.px(200)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="right" foregroundColor="#888888" transparent="1" />
-            <eLabel position="{self.ui.px(50)},{self.ui.px(565)}" size="{self.ui.px(1000)},{self.ui.px(2)}" backgroundColor="#333333" />
-            <eLabel position="{self.ui.px(70)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="btn_red" position="{self.ui.px(105)},{self.ui.px(595)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(280)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="btn_green" position="{self.ui.px(315)},{self.ui.px(595)}" size="{self.ui.px(120)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(460)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="btn_yellow" position="{self.ui.px(495)},{self.ui.px(595)}" size="{self.ui.px(280)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <eLabel position="{self.ui.px(790)},{self.ui.px(600)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="btn_blue" position="{self.ui.px(825)},{self.ui.px(595)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(24)}" transparent="1" />
-            <widget name="status" position="{self.ui.px(50)},{self.ui.px(670)}" size="{self.ui.px(1000)},{self.ui.px(70)}" font="Regular;{self.ui.font(32)}" halign="center" valign="center" transparent="1" foregroundColor="#f0a30a"/>
-            <eLabel text="MENU: Save Mode" position="{self.ui.px(50)},{self.ui.px(525)}" size="{self.ui.px(250)},{self.ui.px(35)}" font="Regular;{self.ui.font(22)}" halign="left" foregroundColor="#888888" transparent="1" />
-        </screen>"""
+        self.skin = build_main_skin(self.ui)
         
         self["btn_red"] = Label("Add Key")
         self["btn_green"] = Label("Editor")
@@ -176,7 +448,7 @@ class BISSPro(Screen):
         try: self.timer.callback.append(self.show_result)
         except: self.timer.timeout.connect(self.show_result)
         
-        self["menu"] = MenuList([])
+        self["menu"] = new_list()
         self["menu"].onSelectionChanged.append(self.update_dynamic_logo)
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "MenuActions"], {
             "ok": self.ok, 
@@ -199,7 +471,7 @@ class BISSPro(Screen):
             ("Smart Hash Only", "smart"),
             ("Classic (SID/VPID) Only", "classic")
         ]
-        self.session.openWithCallback(self.set_save_mode, ChoiceBox, title="Permanent Saving Method:", list=options)
+        self.session.openWithCallback(self.set_save_mode, BPChoiceBox, title="Permanent Saving Method:", list=options)
 
     def set_save_mode(self, mode):
         if mode:
@@ -217,7 +489,7 @@ class BISSPro(Screen):
             
         curr = self["menu"].getCurrent()
         if curr:
-            act = curr[1][-1]
+            act = curr[0]
             icon_map = {"add": "add.png", "editor": "editor.png", "upd": "Download Softcam.png", "auto": "auto.png"}
             icon_file = icon_map.get(act, "plugin.png")
             path = os.path.join(PLUGIN_PATH, "icons/", icon_file)
@@ -249,7 +521,7 @@ class BISSPro(Screen):
                         notes = "New update available."
                     
                     msg = "Update Found: v%s\n\nWhat's New:\n%s\n\nInstall Update?" % (str(remote_v), notes)
-                    self.session.openWithCallback(self.install_update, MessageBox, msg, MessageBox.TYPE_YESNO)
+                    self.session.openWithCallback(self.install_update, BPMessageBox, msg, BPMessageBox.TYPE_YESNO)
         except: pass
 
     def install_update(self, answer):
@@ -287,11 +559,11 @@ class BISSPro(Screen):
         self["status"].setText("Mode: " + self.save_mode.upper())
         if self.res[0]:
             if len(self.res) > 2 and self.res[2] == "plugin_upd":
-                self.session.openWithCallback(self.answer_restart, MessageBox, self.res[1], MessageBox.TYPE_YESNO)
+                self.session.openWithCallback(self.answer_restart, BPMessageBox, self.res[1], BPMessageBox.TYPE_YESNO)
             else:
-                self.session.open(MessageBox, self.res[1], MessageBox.TYPE_INFO, timeout=5)
+                self.session.open(BPMessageBox, self.res[1], BPMessageBox.TYPE_INFO, timeout=5)
         else:
-            self.session.open(MessageBox, self.res[1], MessageBox.TYPE_ERROR, timeout=5)
+            self.session.open(BPMessageBox, self.res[1], BPMessageBox.TYPE_ERROR, timeout=5)
 
     def answer_restart(self, answer):
         if answer: quitMainloop(3)
@@ -303,30 +575,18 @@ class BISSPro(Screen):
     def build_menu(self):
         icon_dir = os.path.join(PLUGIN_PATH, "icons/")
         menu_items = [
-            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"), 
-            ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"), 
-            ("Download Softcam", "Full update from server", "upd", icon_dir + "Download Softcam.png"), 
+            ("Add Key", "Manual BISS Entry", "add", icon_dir + "add.png"),
+            ("Key Editor", "Manage stored keys", "editor", icon_dir + "editor.png"),
+            ("Download Softcam", "Full update from server", "upd", icon_dir + "Download Softcam.png"),
             ("Autoroll", "Smart search for current channel", "auto", icon_dir + "auto.png")
         ]
-        lst = []
-        for name, desc, act, icon_path in menu_items:
-            pixmap = LoadPixmap(cached=True, path=icon_path) if os.path.exists(icon_path) else None
-            res = (name, [
-                MultiContentEntryPixmapAlphaTest(pos=(self.ui.px(15), self.ui.px(15)), size=(self.ui.px(70), self.ui.px(70)), png=pixmap), 
-                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(10)), size=(self.ui.px(450), self.ui.px(45)), font=0, text=name, flags=RT_VALIGN_TOP), 
-                MultiContentEntryText(pos=(self.ui.px(110), self.ui.px(55)), size=(self.ui.px(450), self.ui.px(35)), font=1, text=desc, flags=RT_VALIGN_TOP, color=0xbbbbbb), 
-                act
-            ])
-            lst.append(res)
-        self["menu"].l.setList(lst)
-        if hasattr(self["menu"].l, 'setFont'): 
-            self["menu"].l.setFont(0, gFont("Regular", self.ui.font(36)))
-            self["menu"].l.setFont(1, gFont("Regular", self.ui.font(24)))
+        setup_list(self["menu"], self.ui, 34, 24, 100)
+        self["menu"].setList([menu_row(self.ui, n, d, a, p) for n, d, a, p in menu_items])
 
     def ok(self):
         curr = self["menu"].getCurrent()
         if curr:
-            act = curr[1][-1]
+            act = curr[0]
             if act == "add": self.action_add()
             elif act == "editor": self.action_editor()
             elif act == "upd": self.action_update()
@@ -784,7 +1044,7 @@ class BissProServiceWatcher:
                 f.flush()
             os.chmod(target, 0o644)
             restart_softcam_global()
-            self.session.open(MessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", MessageBox.TYPE_INFO, timeout=4)
+            self.session.open(BPMessageBox, f"Key Found & Saved ({current_mode.upper()}): {key}\nChannel: {name}", BPMessageBox.TYPE_INFO, timeout=4)
             return True
         except: return False
         
@@ -792,16 +1052,11 @@ class BissManagerList(Screen):
     def __init__(self, session):
         self.ui = AutoScale()
         Screen.__init__(self, session)
-        self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1000)},{self.ui.px(700)}" title="BissPro - Key Editor">
-            <widget name="keylist" position="{self.ui.px(20)},{self.ui.px(20)}" size="{self.ui.px(960)},{self.ui.px(520)}" itemHeight="{self.ui.px(50)}" scrollbarMode="showOnDemand" />
-            <eLabel position="0,{self.ui.px(560)}" size="{self.ui.px(1000)},{self.ui.px(140)}" backgroundColor="#252525" zPosition="-1" />
-            <eLabel position="{self.ui.px(30)},{self.ui.px(590)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#00ff00" />
-            <eLabel text="GREEN: Edit" position="{self.ui.px(75)},{self.ui.px(585)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
-            <eLabel position="{self.ui.px(30)},{self.ui.px(635)}" size="{self.ui.px(30)},{self.ui.px(30)}" backgroundColor="#ff0000" />
-            <eLabel text="RED: Delete" position="{self.ui.px(75)},{self.ui.px(630)}" size="{self.ui.px(300)},{self.ui.px(40)}" font="Regular;26" transparent="1" />
-        </screen>"""
-        self["keylist"] = MenuList([])
+        self.skin = build_editor_skin(self.ui)
+        self.entries = []
+        self["keylist"] = new_list()
+        self["count"] = Label("")
+        self["keylist"].onSelectionChanged.append(self.update_count)
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions"], {"green": self.edit_key, "cancel": self.close, "red": self.delete_confirm}, -1)
         self.onLayoutFinish.append(self.load_keys)
     def load_keys(self):
@@ -810,9 +1065,19 @@ class BissManagerList(Screen):
             with open(path, "r") as f:
                 for line in f:
                     if line.strip().upper().startswith("F "): keys.append(line.strip())
-        self["keylist"].setList(keys)
+        self.entries = keys
+        setup_list(self["keylist"], self.ui, 28, 24, 60)
+        self["keylist"].setList([key_row(self.ui, k) for k in keys])
+        self.update_count()
+    def current_line(self):
+        cur = self["keylist"].getCurrent()
+        return cur[0] if cur else None
+    def update_count(self):
+        n = len(self.entries)
+        idx = (self["keylist"].getSelectionIndex() + 1) if n else 0
+        self["count"].setText("%d / %d" % (idx, n))
     def edit_key(self):
-        current = self["keylist"].getCurrent()
+        current = self.current_line()
         if current:
             parts = current.split(); ch_name = current.split(";")[-1] if ";" in current else "Unknown"; self.old_line = current
             self.session.openWithCallback(self.finish_edit, HexInputScreen, ch_name, parts[3] if len(parts) > 3 else "")
@@ -834,11 +1099,11 @@ class BissManagerList(Screen):
             self.load_keys()
         except: pass
     def delete_confirm(self):
-        current = self["keylist"].getCurrent()
-        if current: self.session.openWithCallback(self.delete_key, MessageBox, "Delete this key?", MessageBox.TYPE_YESNO)
+        current = self.current_line()
+        if current: self.session.openWithCallback(self.delete_key, BPMessageBox, "Delete this key?", BPMessageBox.TYPE_YESNO)
     def delete_key(self, answer):
         if answer:
-            current = self["keylist"].getCurrent(); path = get_softcam_path()
+            current = self.current_line(); path = get_softcam_path()
             try:
                 with open(path, "r") as f: lines = f.readlines()
                 new_list = []
@@ -857,24 +1122,7 @@ class HexInputScreen(Screen):
     def __init__(self, session, channel_name="", existing_key=""):
         self.ui = AutoScale()
         Screen.__init__(self, session)
-        self.skin = f"""
-        <screen position="center,center" size="{self.ui.px(1150)},{self.ui.px(650)}" title="BissPro - Key Input" backgroundColor="#1a1a1a">
-            <widget name="channel" position="{self.ui.px(10)},{self.ui.px(20)}" size="{self.ui.px(1130)},{self.ui.px(60)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#00ff00" transparent="1" />
-            <widget name="progress" position="{self.ui.px(175)},{self.ui.px(90)}" size="{self.ui.px(800)},{self.ui.px(10)}" foregroundColor="#00ff00" />
-            <widget name="keylabel" position="{self.ui.px(25)},{self.ui.px(120)}" size="{self.ui.px(1100)},{self.ui.px(110)}" font="Regular;{self.ui.font(80)}" halign="center" foregroundColor="#f0a30a" transparent="1" />
-            <eLabel text="OK: confirm  |  ◄ ► : move  left / right  |  ▲ ▼ : letters up / down" position="{self.ui.px(10)},{self.ui.px(280)}" size="{self.ui.px(1130)},{self.ui.px(40)}" font="Regular;{self.ui.font(34)}" halign="center" foregroundColor="#bbbbbb" transparent="1" />
-            <widget name="channel_data" position="{self.ui.px(10)},{self.ui.px(235)}" size="{self.ui.px(1130)},{self.ui.px(50)}" font="Regular;{self.ui.font(32)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <widget name="char_list" position="{self.ui.px(1020)},{self.ui.px(120)}" size="{self.ui.px(100)},{self.ui.px(300)}" font="Regular;{self.ui.font(45)}" halign="center" foregroundColor="#ffffff" transparent="1" />
-            <eLabel position="0,{self.ui.px(460)}" size="{self.ui.px(1150)},{self.ui.px(190)}" backgroundColor="#252525" zPosition="-1" />
-            <eLabel position="{self.ui.px(80)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ff0000" />
-            <widget name="l_red" position="{self.ui.px(115)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(330)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#00ff00" />
-            <widget name="l_green" position="{self.ui.px(365)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(580)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#ffff00" />
-            <widget name="l_yellow" position="{self.ui.px(615)},{self.ui.px(495)}" size="{self.ui.px(150)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-            <eLabel position="{self.ui.px(830)},{self.ui.px(500)}" size="{self.ui.px(25)},{self.ui.px(25)}" backgroundColor="#0000ff" />
-            <widget name="l_blue" position="{self.ui.px(865)},{self.ui.px(495)}" size="{self.ui.px(200)},{self.ui.px(40)}" font="Regular;{self.ui.font(26)}" transparent="1" />
-        </screen>"""
+        self.skin = build_hex_skin(self.ui)
         self["channel"] = Label(f"{channel_name}"); self["channel_data"] = Label(""); self["keylabel"] = Label(""); self["char_list"] = Label(""); self["progress"] = ProgressBar()
         self["l_red"] = Label("Exit"); self["l_green"] = Label("Save"); self["l_yellow"] = Label("Clear"); self["l_blue"] = Label("Reset All")
         self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "DirectionActions"], {
@@ -906,7 +1154,7 @@ class HexInputScreen(Screen):
         self["keylabel"].setText("".join(display_parts))
         self["progress"].setValue(int(((self.index + 1) / 16.0) * 100))
         char_col = ""
-        for i, c in enumerate(self.chars): char_col += ("\c00f0a30a[%s]\n" if i == self.char_index else "\c00ffffff %s \n") % c
+        for i, c in enumerate(self.chars): char_col += ("\\c00f0a30a[%s]\n" if i == self.char_index else "\\c00ffffff %s \n") % c
         self["char_list"].setText(char_col)
     def confirm_char(self): self.key_list[self.index] = self.chars[self.char_index]; self.index = min(15, self.index + 1); self.update_display()
     def clear_current(self): self.key_list[self.index] = "0"; self.update_display()
