@@ -13,7 +13,16 @@ from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Components.ProgressBar import ProgressBar
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
+try:
+    from Components.MultiContent import MultiContentEntryPixmapAlphaBlend
+except Exception:
+    MultiContentEntryPixmapAlphaBlend = MultiContentEntryPixmapAlphaTest
 from enigma import iServiceInformation, gFont, eTimer, getDesktop, eListboxPythonMultiContent, RT_HALIGN_LEFT, RT_VALIGN_TOP, RT_VALIGN_CENTER, quitMainloop
+try:
+    from enigma import BT_SCALE, BT_KEEP_ASPECT_RATIO, BT_HALIGN_CENTER, BT_VALIGN_CENTER
+    ICON_FLAGS = BT_SCALE | BT_KEEP_ASPECT_RATIO | BT_HALIGN_CENTER | BT_VALIGN_CENTER
+except Exception:
+    ICON_FLAGS = 0
 from Tools.LoadPixmap import LoadPixmap
 import os, re, shutil, time, random, csv, json
 import urllib.request
@@ -279,7 +288,7 @@ def menu_row(ui, name, desc, act, icon_path):
     if icon_path and os.path.exists(icon_path):
         pm = LoadPixmap(cached=True, path=icon_path)
         if pm:
-            res.append(MultiContentEntryPixmapAlphaTest(pos=(ui.px(15), ui.px(15)), size=(ui.px(70), ui.px(70)), png=pm))
+            res.append(MultiContentEntryPixmapAlphaBlend(pos=(ui.px(10), ui.px(10)), size=(ui.px(80), ui.px(80)), png=pm, flags=ICON_FLAGS))
             x_text = ui.px(105)
     tw = w - x_text - ui.px(10)
     res.append(MultiContentEntryText(pos=(x_text, ui.px(10)), size=(tw, ui.px(45)), font=0,
